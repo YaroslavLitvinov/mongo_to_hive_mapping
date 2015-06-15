@@ -106,7 +106,10 @@ if __name__ == "__main__":
     collection_names = db.collection_names()
     quotes = db[split_name[1]]
     rec_list = quotes.find( search_request )
+
+    schema={}
+    for r in rec_list:
+        schema, nested_branches = get_mongo_collection_schema(r, schema)
     
     json.dumps(schema, args.output_schema_file)
     
-    #pickle.load(args.storage_file_r)        
