@@ -1,44 +1,37 @@
 #!/usr/bin/env python
 
-"""Read data from mongo collection and create 'schema' that corresponding to read data.\
-Excessive schema fields can be filtered by providing list of fields to filtering."""
+"""Read data from mongo collection and create 'schema' that
+corresponding to read data. Export schema as json."""
 
 import sys
 import json
 import argparse
+import bson
+import datetime
 from pymongo.mongo_client import MongoClient
 
 def message(mes):
     sys.stderr.write( mes + '\n')
 
-#schema and schema_branches are calculates separately and not depends on each other
 def get_mongo_collection_schema(source_data, schema):
-    schema_branches = nested_branches = {}
     if type(source_data) is dict:
         if type(schema) is not dict:
             schema = {}
         for key in source_data:
             nested_schema = {}
-            schema_branches[key] = 1
-            #modify schema field to be compatible with hive
-            hive_key = key.replace('?', '')
-            if len(key) > 0 and key[0] == '_' :
-                hive_key = key[1:]
             #add to schema
-            if ( schema.get(hive_key) == None ):
-                schema[hive_key] = {}
+            if ( schema.get(key) == None ):
+                schema[key] = {}
             else:
-                nested_schema = schema[hive_key]
-            tmp_schema, nested_branches = get_mongo_collection_schema(source_data[key], nested_schema)
+                nested_schema = schema[key]
+            tmp_schema = get_mongo_collection_schema(source_data[key], nested_schema)
             #trying to resolve conflicts automatically, do not overwrite schema by empty data
             if type(tmp_schema) == type:
-                schema[hive_key] = tmp_schema
-            elif type(schema[hive_key]) == None or type(schema[hive_key]) == type(None) or \
-                    ( (type(schema[hive_key]) is dict or type(schema[hive_key]) is list) \
-                          and len(tmp_schema) >= len(schema[hive_key]) ) :
-                schema[hive_key] = tmp_schema
-            for nb in nested_branches:
-                schema_branches[key+'.'+nb] = 1
+                schema[key] = tmp_schema
+            elif type(schema[key]) == None or type(schema[key]) == type(None) or \
+                    ( (type(schema[key]) is dict or type(schema[key]) is list) \
+                          and len(tmp_schema) >= len(schema[key]) ) :
+                schema[key] = tmp_schema
     elif type(source_data) is list:
         if type(schema) is list:
             schema_as_list = schema
@@ -46,9 +39,7 @@ def get_mongo_collection_schema(source_data, schema):
             schema_as_list = [schema]
         nested_schema = schema_as_list
         for item in source_data:
-            nested_schema[0], nested_branches = get_mongo_collection_schema(item, nested_schema[0])
-            for nb in nested_branches:
-                schema_branches[nb] = 1
+            nested_schema[0] = get_mongo_collection_schema(item, nested_schema[0])
         #trying to resolve conflicts automatically
         if type(nested_schema[0]) == dict and len(nested_schema[0]) == 0:
             nested_schema = type(None)
@@ -66,24 +57,51 @@ def get_mongo_collection_schema(source_data, schema):
                 schema = { 'oid': str, 'bsontype': int }
         else:
             schema = type(source_data)
-    return (schema, schema_branches)
+    return schema
+
+def python_type_as_str(t):
+    if t is str or t is unicode:
+        return "STR"
+    elif t is int:
+        return "INT"
+    elif t is float:
+        return "DOUBLE"
+    elif t is type(None):
+        return "TINYINT"
+    elif t is datetime.datetime:
+        return "TIMESTAMP"
+    elif t is bool:
+        return "BOOLEAN"
+    elif t is bson.int64.Int64:
+        return "BIGINT"
+    else:
+        raise Exception("Can't handle type ", schema)
+
+
+def prepare_schema_for_serialization(schema):
+    if type(schema) is type:
+        return python_type_as_str(schema)
+    for key in schema:
+        if type(schema[key]) is list:
+            schema[key][0] = prepare_schema_for_serialization(schema[key][0])
+        else:
+            schema[key] = prepare_schema_for_serialization(schema[key])
+    return schema
 
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", help="Mongo db host name", type=str)
-    parser.add_argument("-t", "--table", help="table name that is expected in format db_name.table_name", type=str)
-    parser.add_argument("-b", "--output-branches-file", action="store", 
-                        help="File with list of branches to be used in further", type=argparse.FileType('w'))
-    parser.add_argument("-output-schema-file", action="store", 
+    parser.add_argument("-cn", "--collection-name", help="Mongo collection name that is expected in format db_name.collection_name", type=str)
+    parser.add_argument("-of", action="store", 
                         help="File name with schema data encoded as json(stdout by default)", type=argparse.FileType('w'))
-    parser.add_argument("-js-request", help="Mongo db search request in json format", type=str)
+    parser.add_argument("-js-request", help="Mongo db search request in json format. Default request is {'_id': {'$gt':0}}", type=str)
 
     args = parser.parse_args()
 
-    if args.output_schema_file == None:
-        args.output_file = sys.stdout
+    if args.of == None:
+        args.of = sys.stdout
         message( "using stdout for output schema")
 
     message("Connecting to mongo server "+args.host)
@@ -93,9 +111,9 @@ if __name__ == "__main__":
     else:
         client = MongoClient(args.host, 27017)
 
-    split_name = args.table.split('.')
+    split_name = args.collection_name.split('.')
     if len(split_name) != 2:
-        message("table name is expected in format db_name.table_name")
+        message("collection name is expected in format db_name.collection_name")
         exit(1)
 
     search_request = {'_id': {'$gt':0}}
@@ -109,7 +127,9 @@ if __name__ == "__main__":
 
     schema={}
     for r in rec_list:
-        schema, nested_branches = get_mongo_collection_schema(r, schema)
-    
-    json.dumps(schema, args.output_schema_file)
+        schema = get_mongo_collection_schema(r, schema)
+
+    schema = prepare_schema_for_serialization(schema)
+    json.dump(schema, args.of, indent=4)
+
     
