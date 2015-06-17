@@ -345,7 +345,7 @@ if __name__ == "__main__":
                   "schema"     : table_schema,
                   "mappings"   : str(keys_mapping).replace("'", '"') }
     external_table = ""
-    with open('template.txt', 'r') as templ_file:
+    with open(os.path.dirname(os.path.abspath(__file__))+'/template.txt', 'r') as templ_file:
         templ_str = templ_file.read()
         external_table = templ_str % templ_dict
         templ_file.close()
