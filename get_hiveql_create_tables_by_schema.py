@@ -11,8 +11,6 @@ __email__       = "yaroslav.litvinov@rackspace.com"
 
 import sys
 import os
-import shutil
-import pprint
 import argparse
 import json
 
@@ -122,53 +120,33 @@ def get_branches_from_schema_recursively(schema):
     return branches
 
 
+def get_canonical_hive_schema_recursively(schema):
+    if type(schema) is not list and type(schema) is not dict:
+        return schema
+
+    canonical_schema = {}
+    for key, value in schema.iteritems():
+        if key[0] == '_':
+            key = key[1:]
+        key = key.replace('?','')
+        if type(value) is list:
+            canonical_schema[key] = [get_canonical_hive_schema_recursively(value[0])]
+        elif type(value) is dict:
+            canonical_schema[key] = get_canonical_hive_schema_recursively(value)
+        else:
+            canonical_schema[key] = value
+    return canonical_schema
+
+
 def get_struct_fields_recursively(schema):
     select_fields = []
     for key, value in schema.iteritems():
         if type(value) is dict:
             select_fields = select_fields+get_struct_fields_recursively(value)
-        elif type(value) is type:
+        elif type(value) is not list:
             select_fields.append(key)
     return select_fields
     
-
-def create_structure_for_plain_hive_tables(nesting_list, schema, res_tables):
-    select_fields = []
-    selects_primaryk = []
-    output = ""
-    if type(schema) is dict:
-        schema_as_dict = schema
-    elif type(schema) is list:
-        schema_as_dict = schem[0]
-    else:
-        return
-
-    select_fields = []
-    for key, value in schema_as_dict.iteritems():
-        if type(value) is list:
-            create_structure_for_plain_hive_tables(nesting_list+[key], value[0], res_tables) 
-        elif type(value) is dict:
-            struct_fields = get_struct_fields_recursively(value)
-            for item in struct_fields:
-                select_fields.append( [key] + [item] )
-        else:
-            select_fields.append(key)
-
-    compound_name = ""
-    for i in xrange(len(nesting_list)):
-        nest = nesting_list[i]
-        name = nest[:-1]
-        if len(compound_name) != 0 :
-            compound_name += "_"
-        compound_name += name
-        grp = nest+"_exp"
-        pk = "row_number() over(order by {0}.id) {1}_id".format( grp, name )
-        if i == len(nesting_list)-1:
-            pk = "row_number() over(order by {0}.id) {1}_id".format( grp, compound_name )
-        selects_primaryk.append(pk)
-    res_tables[compound_name+'s'] = (select_fields, nesting_list, selects_primaryk)
-
-
 def create_keys_mapping(branches):
     mappings = {}
     for item in branches:
@@ -181,10 +159,7 @@ def create_keys_mapping(branches):
             mappings[str(item)] = str(new_item)
     return mappings
 
-def hiveql_create_table_scripts(ext_table_name, base_table_name, tables_folder_name):
-    res_tables = {}
-    create_structure_for_plain_hive_tables([base_table_name], schema, res_tables)
-
+class HiveTableGenerator:
     create_fmt = "drop table {0}; create table {0} stored as orc as\n"
     select_fmt = "SELECT\n {0}{1}{2} \nFROM "
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
@@ -192,54 +167,126 @@ def hiveql_create_table_scripts(ext_table_name, base_table_name, tables_folder_n
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
-    for table_name, table_struct in res_tables.iteritems():
-        query_str = ""
-        select_str = ""
-        nest_items = table_struct[1]
-        for nest_idx in xrange(len(nest_items)):
-            if nest_idx == 0:
+    
+    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name):
+        self.helper_structure = {}
+        self.ext_table_name = ext_table_name
+        self.tables_folder_name = tables_folder_name
+        self.create_structure_for_plain_hive_tables([base_table_name], schema, self.helper_structure)
+
+    def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
+        select_fields = []
+        selects_primaryk = []
+        output = ""
+        if type(schema) is dict:
+            schema_as_dict = schema
+        elif type(schema) is list:
+            schema_as_dict = schema[0]
+        else:
+            return
+    
+        select_fields = []
+        for key, value in schema_as_dict.iteritems():
+            if type(value) is list:
+                self.create_structure_for_plain_hive_tables(nesting_list+[key], value[0], res_tables) 
+            elif type(value) is dict:
+                struct_fields = get_struct_fields_recursively(value)
+                for item in struct_fields:
+                    select_fields.append( [key] + [item] )
+            else:
+                select_fields.append(key)
+    
+        compound_name = ""
+        for i in xrange(len(nesting_list)):
+            nest = nesting_list[i]
+            name = nest[:-1]
+            if len(compound_name) != 0 :
+                compound_name += "_"
+            compound_name += name
+            grp = nest+"_exp"
+            pk = "row_number() over(order by {0}.id) {1}_id".format( grp, name )
+            if i == len(nesting_list)-1:
+                pk = "row_number() over(order by {0}.id) {1}_id".format( grp, compound_name )
+            selects_primaryk.append(pk)
+        res_tables[compound_name+'s'] = (select_fields, nesting_list, selects_primaryk)
+
+
+    def hiveql_gen_nested_plain_tables(self):
+        for table_name, table_struct in self.helper_structure.iteritems():
+            query_str = ""
+            select_str = ""
+            nest_items = table_struct[1]
+            #skip base table
+            if len(nest_items) == 1:
                 continue
-            prev_nest = nest_items[nest_idx-1]
-            nest = nest_items[nest_idx]
-            next_nest = ""
-            if nest_idx+1 < len(nest_items):
-                next_nest = nest_items[nest_idx+1]
-                
-            explode_as_str = explode_as_fmt.format(prev_nest, nest)
-            pk_str = primaryk_fmt.format( nest, table_name[:-1]+"_id" )
+            for nest_idx in xrange(len(nest_items)):
+                if nest_idx == 0:
+                    continue
+                prev_nest = nest_items[nest_idx-1]
+                nest = nest_items[nest_idx]
+                next_nest = ""
+                if nest_idx+1 < len(nest_items):
+                    next_nest = nest_items[nest_idx+1]
+                    
+                explode_as_str = self.explode_as_fmt.format(prev_nest, nest)
+                pk_str = self.primaryk_fmt.format( nest, table_name[:-1]+"_id" )
+    
+                if len(next_nest) == 0:
+                    #if main select
+                    select_items_str = ""
+                    for t in table_struct[0]:
+                        main_sel_item = ""
+                        if type(t) is list:
+                            main_sel_item = '.'.join(t)
+                        else:
+                            main_sel_item = t
+                        select_items_str += \
+                            self.select_item_fmt.format(nest, 
+                                                   main_sel_item, 
+                                                   table_name[:-1]+"_"+main_sel_item)
+                    foreignk_str = self.foreignk_fmt.format(nest, 
+                                                       "_".join(nest_items[:-1])[:-1])
+                    select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
+                else:
+                    #if nested selects
+                    select_exp_str = self.select_exp_fmt.format(nest, next_nest)
+                    select_str = self.select_fmt.format(pk_str, select_exp_str, "")
+                if len(query_str) == 0:
+                    query_str = select_str + self.ext_table_name
+                else:
+                    query_str = select_str + "("+query_str+")"
+                query_str += "\n" + explode_as_str
+            query_str += ";"
+    
+            complete_script = self.create_fmt.format(table_name)+query_str
+            with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
+                plain_table_file.write(complete_script)
+                plain_table_file.close()
+                message(plain_table_file.name)
 
-            if len(next_nest) == 0:
-                #if main select
-                select_items_str = ""
-                for t in table_struct[0]:
-                    main_sel_item = ""
-                    if type(t) is list:
-                        main_sel_item = '.'.join(t)
-                    else:
-                        main_sel_item = t
-                    select_items_str += \
-                        select_item_fmt.format(nest, 
-                                               main_sel_item, 
-                                               table_name[:-1]+"_"+main_sel_item)
-                foreignk_str = foreignk_fmt.format(nest, 
-                                                   "_".join(nest_items[:-1])[:-1])
-                select_str = select_fmt.format(pk_str, foreignk_str, select_items_str)
-            else:
-                #if nested selects
-                select_exp_str = select_exp_fmt.format(nest, next_nest)
-                select_str = select_fmt.format(pk_str, select_exp_str, "")
-            if len(query_str) == 0:
-                query_str = select_str + ext_table_name
-            else:
-                query_str = select_str + "("+query_str+")"
-            query_str += "\n" + explode_as_str
-        query_str += ";"
-
-        complete_script = create_fmt.format(table_name)+query_str
-        with open(tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
-            plain_table_file.write(complete_script)
-            plain_table_file.close()
-            message(plain_table_file.name)
+    def hiveql_gen_base_plain_table(self):
+        for table_name, table_struct in self.helper_structure.iteritems():
+            nest_items = table_struct[1]
+            #skip all nested structures
+            if len(nest_items) > 1:
+                continue
+            select_items_str = ""
+            for t in table_struct[0]:
+                main_sel_item = ""
+                if type(t) is list:
+                    main_sel_item = '.'.join(t)
+                else:
+                    main_sel_item = t
+                if len(select_items_str):
+                    main_sel_item = ',\n'+main_sel_item
+                select_items_str += main_sel_item
+            select_str = self.select_fmt.format(select_items_str, "", "")
+            query_str = select_str + self.ext_table_name + ';'
+            complete_script = self.create_fmt.format(table_name)+query_str
+            with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
+                plain_table_file.write(complete_script)
+                plain_table_file.close()
+                message(plain_table_file.name)
 
 
 if __name__ == "__main__":
@@ -255,13 +302,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.table_name == None or args.mongouri == None or args.output_dir == None:
+        parser.print_help()
+        exit(1)
+
     if args.input_file_schema == None:
         args.input_file_schema = sys.stdin
         message( "using stdin to read schema in json format")
 
     ext_table_name = 'mongo'+args.table_name
-
-    pp = pprint.PrettyPrinter(indent=0)
 
     schema = json.load(args.input_file_schema)
     schema_branches=get_branches_from_schema_recursively(schema)
@@ -274,14 +323,20 @@ if __name__ == "__main__":
         remove_excluded_branches_from_schema(schema, exclude_branches_structure)
     
     keys_mapping = create_keys_mapping(schema_branches)
+    #rewrite current schema after getting keys mapping, it's used original names of fields
+    schema = get_canonical_hive_schema_recursively(schema)
 
     tables_folder_name = args.output_dir
     if os.path.isdir(tables_folder_name) == True:
-        shutil.rmtree(tables_folder_name)
+        message('Directory '+tables_folder_name+' is exist, exiting.')
+        exit(1)
     os.mkdir(tables_folder_name)
     #generate native flat tables
     message('Saved plain tables: ')
-    hiveql_create_table_scripts(ext_table_name, args.table_name, tables_folder_name)
+
+    hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name)
+    hive_gen.hiveql_gen_nested_plain_tables()
+    hive_gen.hiveql_gen_base_plain_table()
 
     #generate external nested table
     table_schema  = generate_external_hive_table(0, schema)

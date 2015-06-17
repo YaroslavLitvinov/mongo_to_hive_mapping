@@ -104,17 +104,21 @@ if __name__ == "__main__":
         args.of = sys.stdout
         message( "using stdout for output schema")
 
+    if args.host == None or args.collection_name:
+        parser.print_help()
+        exit(1)
+
+    split_name = args.collection_name.split('.')
+    if len(split_name) != 2:
+        message("collection name is expected in format db_name.collection_name")
+        exit(1)
+
     message("Connecting to mongo server "+args.host)
     split_host = args.host.split(':')
     if len(split_host) > 1:
         client = MongoClient(split_host[0], int(split_host[1]))
     else:
         client = MongoClient(args.host, 27017)
-
-    split_name = args.collection_name.split('.')
-    if len(split_name) != 2:
-        message("collection name is expected in format db_name.collection_name")
-        exit(1)
 
     search_request = {'_id': {'$gt':0}}
     if args.js_request != None:
