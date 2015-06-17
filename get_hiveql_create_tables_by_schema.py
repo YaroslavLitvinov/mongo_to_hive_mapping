@@ -130,9 +130,13 @@ def get_canonical_hive_schema_recursively(schema):
             key = key[1:]
         key = key.replace('?','')
         if type(value) is list:
-            canonical_schema[key] = [get_canonical_hive_schema_recursively(value[0])]
+            #do not propogate array of empty structs
+            if not(len(value)>0 and type(value[0]) is dict and len(value[0]) == 0):
+                canonical_schema[key] = [get_canonical_hive_schema_recursively(value[0])]
         elif type(value) is dict:
-            canonical_schema[key] = get_canonical_hive_schema_recursively(value)
+            #do not propogate empty structs
+            if len(value) != 0:
+                canonical_schema[key] = get_canonical_hive_schema_recursively(value)
         else:
             canonical_schema[key] = value
     return canonical_schema
@@ -142,7 +146,13 @@ def get_struct_fields_recursively(schema):
     select_fields = []
     for key, value in schema.iteritems():
         if type(value) is dict:
-            select_fields = select_fields+get_struct_fields_recursively(value)
+            for item in get_struct_fields_recursively(value):
+                if type(item) is list:
+                    s = [key]
+                    s.extend(item)
+                    select_fields.append( s )
+                else:
+                    select_fields.append( [key, item] )
         elif type(value) is not list:
             select_fields.append(key)
     return select_fields
@@ -165,6 +175,7 @@ class HiveTableGenerator:
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
     select_exp_fmt = ",\n{0}_exp.{1}.id AS id"
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
+    select_item_fmt2 = "{0} AS {1}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
     
@@ -192,7 +203,12 @@ class HiveTableGenerator:
             elif type(value) is dict:
                 struct_fields = get_struct_fields_recursively(value)
                 for item in struct_fields:
-                    select_fields.append( [key] + [item] )
+                    if type(item) is list:
+                        s = [key]
+                        s.extend(item)
+                        select_fields.append( s )
+                    else:
+                        select_fields.append( [key] + [item] )
             else:
                 select_fields.append(key)
     
@@ -243,7 +259,7 @@ class HiveTableGenerator:
                         select_items_str += \
                             self.select_item_fmt.format(nest, 
                                                    main_sel_item, 
-                                                   table_name[:-1]+"_"+main_sel_item)
+                                                   table_name[:-1]+"_"+main_sel_item.replace('.', '_'))
                     foreignk_str = self.foreignk_fmt.format(nest, 
                                                        "_".join(nest_items[:-1])[:-1])
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
@@ -275,6 +291,7 @@ class HiveTableGenerator:
                 main_sel_item = ""
                 if type(t) is list:
                     main_sel_item = '.'.join(t)
+                    main_sel_item = self.select_item_fmt2.format(main_sel_item, main_sel_item.replace('.', '_'))
                 else:
                     main_sel_item = t
                 if len(select_items_str):
@@ -314,6 +331,10 @@ if __name__ == "__main__":
 
     schema = json.load(args.input_file_schema)
     schema_branches=get_branches_from_schema_recursively(schema)
+
+    if args.output_branches != None:
+        for item in schema_branches:
+            args.output_branches.writelines(item+'\n')
 
     if args.fexclude != None:
         exclude_branches_list = []
@@ -355,3 +376,4 @@ if __name__ == "__main__":
         ext_table_file.write(external_table)
         ext_table_file.close()
         message(ext_table_file.name)
+
