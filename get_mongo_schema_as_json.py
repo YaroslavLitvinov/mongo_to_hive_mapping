@@ -61,7 +61,7 @@ def get_mongo_collection_schema(source_data, schema):
 
 def python_type_as_str(t):
     if t is str or t is unicode:
-        return "STR"
+        return "STRING"
     elif t is int:
         return "INT"
     elif t is float:
