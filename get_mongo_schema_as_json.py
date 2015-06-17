@@ -104,7 +104,7 @@ if __name__ == "__main__":
         args.of = sys.stdout
         message( "using stdout for output schema")
 
-    if args.host == None or args.collection_name:
+    if args.host == None or args.collection_name == None:
         parser.print_help()
         exit(1)
 
