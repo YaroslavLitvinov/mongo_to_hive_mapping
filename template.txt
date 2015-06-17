@@ -1,0 +1,5 @@
+drop table %(table_name)s;
+create external table %(table_name)s %(schema)s
+STORED BY 'com.mongodb.hadoop.hive.MongoStorageHandler'
+WITH SERDEPROPERTIES('mongo.columns.mapping'='%(mappings)s')
+TBLPROPERTIES('mongo.uri'='%(mongouri)s');
