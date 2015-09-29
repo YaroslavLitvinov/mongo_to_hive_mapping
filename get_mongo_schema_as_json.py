@@ -10,8 +10,8 @@ import bson
 import datetime
 from pymongo.mongo_client import MongoClient
 
-def message(mes):
-    sys.stderr.write( mes + '\n')
+def message(mes, cr='\n'):
+    sys.stderr.write( mes + cr)
 
 def get_mongo_collection_schema(source_data, schema):
     if type(source_data) is dict:
@@ -91,12 +91,16 @@ def prepare_schema_for_serialization(schema):
 
 if __name__ == "__main__":
     
+    default_request = '{"_id": {"$gt":0}}'
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", help="Mongo db host name", type=str)
+    parser.add_argument("--host", help="Mongo db host:port", type=str)
+    parser.add_argument("-user", help="Mongo db user", type=str)
+    parser.add_argument("-passw", help="Mongo db pass", type=str)
     parser.add_argument("-cn", "--collection-name", help="Mongo collection name that is expected in format db_name.collection_name", type=str)
     parser.add_argument("-of", action="store", 
                         help="File name with schema data encoded as json(stdout by default)", type=argparse.FileType('w'))
-    parser.add_argument("-js-request", help="Mongo db search request in json format. Default request is {'_id': {'$gt':0}}", type=str)
+    parser.add_argument("-js-request", help='Mongo db search request in json format. default=%s' % (default_request), type=str)
 
     args = parser.parse_args()
 
@@ -120,9 +124,14 @@ if __name__ == "__main__":
     else:
         client = MongoClient(args.host, 27017)
 
-    search_request = {'_id': {'$gt':0}}
-    if args.js_request != None:
-        search_request = json.loads(args.js_request)
+    if args.user or args.passw:
+        client.quote_management.authenticate(args.user, args.passw)
+        message("Authenticated")
+
+    if args.js_request is None:
+        args.js_request = default_request
+    message( "Mongo request is: %s" % (args.js_request) )
+    search_request = json.loads(args.js_request)
 
     db = client[split_name[0]]
     collection_names = db.collection_names()
@@ -130,8 +139,11 @@ if __name__ == "__main__":
     rec_list = quotes.find( search_request )
 
     schema={}
+    message("Handling records:")
     for r in rec_list:
+        message(".", cr="")
         schema = get_mongo_collection_schema(r, schema)
+    message("\nHandled %d records" % (rec_list.count()))
 
     schema = prepare_schema_for_serialization(schema)
     json.dump(schema, args.of, indent=4)

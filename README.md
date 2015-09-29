@@ -1,8 +1,10 @@
 1. Get mongo collection's "schema" in json format. 
 It will retrieve data from mongodb in according to request specified
-in '-js-request' parameter. Structure of schema and data types will be
-derived from data. In case if field value is null it will assign
-TINYINT data type to schema's field.
+in '-js-request' parameter. Note, that js values must be doublequoted
+and doublequotes are escaped like here: "{\"_id\": {\"\$gt\":0}}"
+Structure of schema and data types will be derived from data. In case
+if field value is null it will assign TINYINT data type to schema's
+field.
 
 example: python get_mongo_schema_as_json.py --host localhost:27017 -cn db.collection -of schema.txt
 
