@@ -130,9 +130,13 @@ def get_canonical_hive_schema_recursively(schema):
             key = key[1:]
         key = key.replace('?','')
         if type(value) is list:
-            canonical_schema[key] = [get_canonical_hive_schema_recursively(value[0])]
+            #do not propogate array of empty structs
+            if not(len(value)>0 and type(value[0]) is dict and len(value[0]) == 0):
+                canonical_schema[key] = [get_canonical_hive_schema_recursively(value[0])]
         elif type(value) is dict:
-            canonical_schema[key] = get_canonical_hive_schema_recursively(value)
+            #do not propogate empty structs
+            if len(value) != 0:
+                canonical_schema[key] = get_canonical_hive_schema_recursively(value)
         else:
             canonical_schema[key] = value
     return canonical_schema
@@ -142,7 +146,13 @@ def get_struct_fields_recursively(schema):
     select_fields = []
     for key, value in schema.iteritems():
         if type(value) is dict:
-            select_fields = select_fields+get_struct_fields_recursively(value)
+            for item in get_struct_fields_recursively(value):
+                if type(item) is list:
+                    s = [key]
+                    s.extend(item)
+                    select_fields.append( s )
+                else:
+                    select_fields.append( [key, item] )
         elif type(value) is not list:
             select_fields.append(key)
     return select_fields
@@ -163,8 +173,8 @@ class HiveTableGenerator:
     create_fmt = "drop table {0}; create table {0} stored as orc as\n"
     select_fmt = "SELECT\n {0}{1}{2} \nFROM "
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
-    select_exp_fmt = ",\n{0}_exp.{1}.id AS id"
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
+    select_item_fmt2 = "{0} AS {1}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
     
@@ -176,7 +186,6 @@ class HiveTableGenerator:
 
     def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
         select_fields = []
-        selects_primaryk = []
         output = ""
         if type(schema) is dict:
             schema_as_dict = schema
@@ -192,7 +201,12 @@ class HiveTableGenerator:
             elif type(value) is dict:
                 struct_fields = get_struct_fields_recursively(value)
                 for item in struct_fields:
-                    select_fields.append( [key] + [item] )
+                    if type(item) is list:
+                        s = [key]
+                        s.extend(item)
+                        select_fields.append( s )
+                    else:
+                        select_fields.append( [key] + [item] )
             else:
                 select_fields.append(key)
     
@@ -203,12 +217,7 @@ class HiveTableGenerator:
             if len(compound_name) != 0 :
                 compound_name += "_"
             compound_name += name
-            grp = nest+"_exp"
-            pk = "row_number() over(order by {0}.id) {1}_id".format( grp, name )
-            if i == len(nesting_list)-1:
-                pk = "row_number() over(order by {0}.id) {1}_id".format( grp, compound_name )
-            selects_primaryk.append(pk)
-        res_tables[compound_name+'s'] = (select_fields, nesting_list, selects_primaryk)
+        res_tables[compound_name+'s'] = (select_fields, nesting_list)
 
 
     def hiveql_gen_nested_plain_tables(self):
@@ -229,7 +238,6 @@ class HiveTableGenerator:
                     next_nest = nest_items[nest_idx+1]
                     
                 explode_as_str = self.explode_as_fmt.format(prev_nest, nest)
-                pk_str = self.primaryk_fmt.format( nest, table_name[:-1]+"_id" )
     
                 if len(next_nest) == 0:
                     #if main select
@@ -243,13 +251,15 @@ class HiveTableGenerator:
                         select_items_str += \
                             self.select_item_fmt.format(nest, 
                                                    main_sel_item, 
-                                                   table_name[:-1]+"_"+main_sel_item)
+                                                   table_name[:-1]+"_"+main_sel_item.replace('.', '_'))
                     foreignk_str = self.foreignk_fmt.format(nest, 
                                                        "_".join(nest_items[:-1])[:-1])
+                    pk_str = self.primaryk_fmt.format( nest, table_name[:-1]+"_id" )
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
                 else:
                     #if nested selects
-                    select_exp_str = self.select_exp_fmt.format(nest, next_nest)
+                    select_exp_str = self.select_item_fmt.format(nest, next_nest, next_nest)
+                    pk_str = self.primaryk_fmt.format( prev_nest, "id" )
                     select_str = self.select_fmt.format(pk_str, select_exp_str, "")
                 if len(query_str) == 0:
                     query_str = select_str + self.ext_table_name
@@ -275,6 +285,7 @@ class HiveTableGenerator:
                 main_sel_item = ""
                 if type(t) is list:
                     main_sel_item = '.'.join(t)
+                    main_sel_item = self.select_item_fmt2.format(main_sel_item, main_sel_item.replace('.', '_'))
                 else:
                     main_sel_item = t
                 if len(select_items_str):
@@ -315,6 +326,10 @@ if __name__ == "__main__":
     schema = json.load(args.input_file_schema)
     schema_branches=get_branches_from_schema_recursively(schema)
 
+    if args.output_branches != None:
+        for item in schema_branches:
+            args.output_branches.writelines(item+'\n')
+
     if args.fexclude != None:
         exclude_branches_list = []
         for line in args.fexclude:
@@ -345,7 +360,7 @@ if __name__ == "__main__":
                   "schema"     : table_schema,
                   "mappings"   : str(keys_mapping).replace("'", '"') }
     external_table = ""
-    with open('template.txt', 'r') as templ_file:
+    with open(os.path.dirname(os.path.abspath(__file__))+'/template.txt', 'r') as templ_file:
         templ_str = templ_file.read()
         external_table = templ_str % templ_dict
         templ_file.close()
@@ -355,3 +370,4 @@ if __name__ == "__main__":
         ext_table_file.write(external_table)
         ext_table_file.close()
         message(ext_table_file.name)
+
