@@ -170,7 +170,7 @@ def create_keys_mapping(branches):
             if new_item[0] == '_' :
                 new_item = new_item[1:]
             #get rid from unicode
-            mappings[str(item)] = str(new_item)
+            mappings[str(new_item)] = str(item)
     return mappings
 
 class HiveTableGenerator:
