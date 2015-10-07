@@ -112,7 +112,11 @@ def get_branches_from_schema_recursively(schema):
             for item in l:
                 branches.append(key+'.'+item)
         elif type(value) is list:
-            l = get_branches_from_schema_recursively(value[0])
+            try:
+                l = get_branches_from_schema_recursively(value[0])
+            except:
+                message("Data type not specified. Empty arrays like [] not allowed")
+                raise
             for item in l:
                 branches.append(key+'.'+item)
         else:

@@ -91,7 +91,7 @@ def prepare_schema_for_serialization(schema):
 
 if __name__ == "__main__":
     
-    default_request = '{"_id": {"$gt":0}}'
+    default_request = '{}'
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", help="Mongo db host:port", type=str)
