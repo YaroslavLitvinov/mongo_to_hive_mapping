@@ -164,7 +164,7 @@ def get_struct_fields_recursively(schema):
 def create_keys_mapping(branches):
     mappings = {}
     for item in branches:
-        if (len(item) > 0 and item[0] == '_') or item.find('._') != -1:
+        if (len(item) > 0 and item[0] == '_') or item.find('._') != -1 or item.find('?') != -1:
             new_item = item.replace('._', '.')
             new_item = new_item.replace('?','')
             if new_item[0] == '_' :
