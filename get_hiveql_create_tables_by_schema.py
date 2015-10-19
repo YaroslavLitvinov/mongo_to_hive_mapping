@@ -256,9 +256,9 @@ class HiveTableGenerator:
                             self.select_item_fmt.format(nest, 
                                                    main_sel_item, 
                                                    table_name[:-1]+"_"+main_sel_item.replace('.', '_'))
-                    foreignk_str = self.foreignk_fmt.format(nest, 
+                    foreignk_str = self.foreignk_fmt.format(prev_nest, 
                                                        "_".join(nest_items[:-1])[:-1])
-                    pk_str = self.primaryk_fmt.format( nest, table_name[:-1]+"_id" )
+                    pk_str = self.primaryk_fmt.format( prev_nest, table_name[:-1]+"_id" )
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
                 else:
                     #if nested selects
