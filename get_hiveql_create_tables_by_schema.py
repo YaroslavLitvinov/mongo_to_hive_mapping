@@ -174,7 +174,7 @@ def create_keys_mapping(branches):
     return mappings
 
 class HiveTableGenerator:
-    create_fmt = "drop table {0}; create table {0} stored as {1} as\n"
+    create_fmt = "drop table {0}; create table {0} {1} as\n"
     select_fmt = "SELECT\n {0}{1}{2} \nFROM "
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
@@ -182,12 +182,12 @@ class HiveTableGenerator:
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
     
-    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_file_format):
+    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties):
         self.helper_structure = {}
         self.ext_table_name = ext_table_name
         self.tables_folder_name = tables_folder_name
         self.create_structure_for_plain_hive_tables([base_table_name], schema, self.helper_structure)
-        self.table_file_format = table_file_format
+        self.table_custom_properties = table_custom_properties
 
     def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
         select_fields = []
@@ -273,7 +273,7 @@ class HiveTableGenerator:
                 query_str += "\n" + explode_as_str
             query_str += ";"
     
-            complete_script = self.create_fmt.format(table_name, self.table_file_format)+query_str
+            complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
             with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(complete_script)
                 plain_table_file.close()
@@ -298,7 +298,7 @@ class HiveTableGenerator:
                 select_items_str += main_sel_item
             select_str = self.select_fmt.format(select_items_str, "", "")
             query_str = select_str + self.ext_table_name + ';'
-            complete_script = self.create_fmt.format(table_name, self.table_file_format)+query_str
+            complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
             with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(complete_script)
                 plain_table_file.close()
@@ -315,8 +315,8 @@ if __name__ == "__main__":
     parser.add_argument("-fexclude", action="store", 
                         help="Input file with list of branches to exclude, see 'ofb' option", type=file)
     parser.add_argument("-output-branches", action="store", help="Output file with list of all branches", type=argparse.FileType('w'))
-    parser.add_argument("--table-file-format",
-                        help="One of hive's table file_format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO", 
+    parser.add_argument("-table-custom-properties",
+                        help="Optional hive's table properties like ROW FORMAT, STORED AS, LOCATION", 
                         type=str)
 
     args = parser.parse_args()
@@ -328,6 +328,9 @@ if __name__ == "__main__":
     if args.input_file_schema == None:
         args.input_file_schema = sys.stdin
         message( "using stdin to read schema in json format")
+
+    if args.table_custom_properties == None:
+        args.table_custom_properties = ""
 
     ext_table_name = 'mongo'+args.table_name
 
@@ -357,7 +360,7 @@ if __name__ == "__main__":
     #generate native flat tables
     message('Saved plain tables: ')
 
-    hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, args.table_file_format)
+    hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, args.table_custom_properties)
     hive_gen.hiveql_gen_nested_plain_tables()
     hive_gen.hiveql_gen_base_plain_table()
 
