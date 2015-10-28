@@ -101,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("-of", action="store", 
                         help="File name with schema data encoded as json(stdout by default)", type=argparse.FileType('w'))
     parser.add_argument("-js-request", help='Mongo db search request in json format. default=%s' % (default_request), type=str)
+    parser.add_argument("-rl", "--records-limit", help='Max count of records to be handled', type=int)
 
     args = parser.parse_args()
 
@@ -136,14 +137,17 @@ if __name__ == "__main__":
     db = client[split_name[0]]
     collection_names = db.collection_names()
     quotes = db[split_name[1]]
+
     rec_list = quotes.find( search_request )
+    if args.records_limit is not None:
+        rec_list.limit(args.records_limit)
 
     schema={}
     message("Handling records:")
     for r in rec_list:
         message(".", cr="")
         schema = get_mongo_collection_schema(r, schema)
-    message("\nHandled %d records" % (rec_list.count()))
+    message("\nHandled %d records" % (rec_list.count(with_limit_and_skip=True)))
 
     schema = prepare_schema_for_serialization(schema)
     json.dump(schema, args.of, indent=4)
