@@ -182,12 +182,13 @@ class HiveTableGenerator:
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
     
-    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties):
+    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties, hive_opts):
         self.helper_structure = {}
         self.ext_table_name = ext_table_name
         self.tables_folder_name = tables_folder_name
         self.create_structure_for_plain_hive_tables([base_table_name], schema, self.helper_structure)
         self.table_custom_properties = table_custom_properties
+        self.hive_opts = hive_opts
 
     def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
         select_fields = []
@@ -275,6 +276,7 @@ class HiveTableGenerator:
     
             complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
             with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
+                plain_table_file.write(self.hive_opts)
                 plain_table_file.write(complete_script)
                 plain_table_file.close()
                 message(plain_table_file.name)
@@ -300,6 +302,7 @@ class HiveTableGenerator:
             query_str = select_str + self.ext_table_name + ';'
             complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
             with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
+                plain_table_file.write(self.hive_opts)
                 plain_table_file.write(complete_script)
                 plain_table_file.close()
                 message(plain_table_file.name)
@@ -318,6 +321,13 @@ if __name__ == "__main__":
     parser.add_argument("-table-custom-properties",
                         help="Optional hive's table properties like ROW FORMAT, STORED AS, LOCATION", 
                         type=str)
+    parser.add_argument("-fhive-mongo-opts", action="store", 
+                        help="Input file with hive mongodb options to be added into output sql files, when needed.", type=file)
+    parser.add_argument("-fhive-opts", action="store", 
+                        help="Input file with generic hive options to be added into output sql files.", type=file)
+    parser.add_argument("-big-table-optimization", 
+                        help="If specified then intermediate native table will be created", action='store_true')
+
 
     args = parser.parse_args()
 
@@ -347,6 +357,12 @@ if __name__ == "__main__":
             exclude_branches_list.append(line.strip())
         exclude_branches_structure = get_exclude_branches_structure(exclude_branches_list)
         remove_excluded_branches_from_schema(schema, exclude_branches_structure)
+
+    hive_mongo_opts = hive_opts = ""
+    if args.fhive_opts is not None:
+        hive_opts = args.fhive_opts.read()
+    if args.fhive_mongo_opts is not None:
+        hive_mongo_opts = args.fhive_mongo_opts.read()
     
     keys_mapping = create_keys_mapping(schema_branches)
     #rewrite current schema after getting keys mapping, it's used original names of fields
@@ -360,7 +376,12 @@ if __name__ == "__main__":
     #generate native flat tables
     message('Saved plain tables: ')
 
-    hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, args.table_custom_properties)
+    if args.big_table_optimization:
+        hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
+                                      args.table_custom_properties, hive_opts)
+    else:
+        hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
+                                      args.table_custom_properties, hive_mongo_opts+hive_opts)        
     hive_gen.hiveql_gen_nested_plain_tables()
     hive_gen.hiveql_gen_base_plain_table()
 
@@ -371,13 +392,24 @@ if __name__ == "__main__":
                   "schema"     : table_schema,
                   "mappings"   : str(keys_mapping).replace("'", '"') }
     external_table = ""
-    with open(os.path.dirname(os.path.abspath(__file__))+'/template.txt', 'r') as templ_file:
+
+    #depending on parameter will be chosed one or another template file
+    template_fname="template.txt"
+    if args.big_table_optimization:
+        template_fname="template_optimized.txt"
+
+    with open(os.path.dirname(os.path.abspath(__file__))+'/'+template_fname, 'r') as templ_file:
         templ_str = templ_file.read()
         external_table = templ_str % templ_dict
         templ_file.close()
 
     message('Saved external table: ')
     with open(tables_folder_name+'/'+ext_table_name+'.sql', 'w') as ext_table_file:
+        #write hive mongodb options
+        ext_table_file.write(hive_mongo_opts)
+        if args.big_table_optimization:
+            #hive options needed for heavy intermediate table
+            ext_table_file.write(hive_opts)
         ext_table_file.write(external_table)
         ext_table_file.close()
         message(ext_table_file.name)
