@@ -1,0 +1,10 @@
+DROP TABLE %(table_name)s_external;
+CREATE EXTERNAL TABLE %(table_name)s_external %(schema)s
+STORED BY 'com.mongodb.hadoop.hive.MongoStorageHandler'
+WITH SERDEPROPERTIES('mongo.columns.mapping'='%(mappings)s')
+TBLPROPERTIES('mongo.uri'='%(mongouri)s');
+
+DROP TABLE %(table_name)s; 
+CREATE TABLE %(table_name)s STORED AS orc AS
+SELECT * 
+FROM %(table_name)s_external;
