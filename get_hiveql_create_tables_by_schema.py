@@ -58,7 +58,7 @@ def remove_excluded_branches_from_schema(schema, exclude_branches_structure):
                         remove_excluded_branches_from_schema(schema[0][key], value)
                 else:
                     message("can't locate array key="+key+" at schema")
-            else:
+            elif schema[0].get(key) != None:
                 del schema[0][key]
 
 
