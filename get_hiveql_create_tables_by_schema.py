@@ -221,13 +221,15 @@ class HiveTableGenerator:
             nest = nesting_list[i]
             name = nest[:-1]
             if len(compound_name) != 0 :
-                compound_name += "_"
+                compound_name += "-"
             compound_name += name
         res_tables[compound_name+'s'] = (select_fields, nesting_list)
 
 
     def hiveql_gen_nested_plain_tables(self):
         for table_name, table_struct in self.helper_structure.iteritems():
+            file_name = table_name
+            table_name = table_name.replace('-','_')
             query_str = ""
             select_str = ""
             nest_items = table_struct[1]
@@ -257,7 +259,7 @@ class HiveTableGenerator:
                         select_items_str += \
                             self.select_item_fmt.format(nest, 
                                                    main_sel_item, 
-                                                   table_name[:-1]+"_"+main_sel_item.replace('.', '_'))
+                                                   table_name[:-1]+'_'+main_sel_item.replace('.', '_'))
                     #use special names for foreign,parent columns to prefent name conflicts
                     foreignk_str = self.foreignk_fmt.format(prev_nest, 
                                                        "_".join(nest_items[:-1]))
@@ -277,7 +279,7 @@ class HiveTableGenerator:
             query_str += ";"
     
             complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
-            with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
+            with open(self.tables_folder_name+"/"+file_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(self.hive_opts)
                 plain_table_file.write(complete_script)
                 plain_table_file.close()
