@@ -281,7 +281,7 @@ class HiveTableGenerator:
                 query_str += "\n" + explode_as_str
             query_str += ";"
 
-            complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
+            complete_script = self.create_fmt.format(table_name, self.table_custom_properties.replace('{TABLE_NAME}', table_name))+query_str
             with open(self.tables_folder_name+"/"+file_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(self.hive_opts)
                 plain_table_file.write(complete_script)
@@ -307,7 +307,7 @@ class HiveTableGenerator:
                 select_items_str += main_sel_item
             select_str = self.select_fmt.format(select_items_str, "", "")
             query_str = select_str + self.ext_table_name + ';'
-            complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
+            complete_script = self.create_fmt.format(table_name, self.table_custom_properties.replace('{TABLE_NAME}', table_name))+query_str
             with open(self.tables_folder_name+"/"+table_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(self.hive_opts)
                 plain_table_file.write(complete_script)
@@ -326,7 +326,8 @@ if __name__ == "__main__":
                         help="Input file with list of branches to exclude, see 'ofb' option", type=file)
     parser.add_argument("-output-branches", action="store", help="Output file with list of all branches", type=argparse.FileType('w'))
     parser.add_argument("-table-custom-properties",
-                        help="Optional hive's table properties like ROW FORMAT, STORED AS, LOCATION", 
+                        help="Optional hive's table properties like ROW FORMAT, STORED AS, LOCATION.\
+Will substitute substring {TABLE_NAME} if provided by real table name", 
                         type=str)
     parser.add_argument("-fhive-mongo-opts", action="store",
                         help="Input file with hive mongodb options to be added into output sql files, when needed.", type=file)
