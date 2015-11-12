@@ -78,7 +78,7 @@ def generate_external_hive_table(indirection_level, schema):
         struct_close = '\n'+indent_struct+'>'
     array_open = 'ARRAY\n'+indent_struct+'<\n'
     array_close = '\n'+indent_struct+'>'
-        
+
     if type(schema) is dict:
         output += struct_open
         for key in schema.keys()[:-1]:
@@ -160,7 +160,7 @@ def get_struct_fields_recursively(schema):
         elif type(value) is not list:
             select_fields.append(key)
     return select_fields
-    
+
 def create_keys_mapping(branches):
     mappings = {}
     for item in branches:
@@ -181,7 +181,7 @@ class HiveTableGenerator:
     select_item_fmt2 = "{0} AS {1}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
-    
+
     def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties, hive_opts, short_column_names):
         self.helper_structure = {}
         self.ext_table_name = ext_table_name
@@ -200,7 +200,7 @@ class HiveTableGenerator:
             schema_as_dict = schema[0]
         else:
             return
-    
+
         select_fields = []
         for key, value in schema_as_dict.iteritems():
             if type(value) is list:
@@ -216,7 +216,7 @@ class HiveTableGenerator:
                         select_fields.append( [key] + [item] )
             else:
                 select_fields.append(key)
-    
+
         compound_name = ""
         for i in xrange(len(nesting_list)):
             nest = nesting_list[i]
@@ -245,9 +245,9 @@ class HiveTableGenerator:
                 next_nest = ""
                 if nest_idx+1 < len(nest_items):
                     next_nest = nest_items[nest_idx+1]
-                    
+
                 explode_as_str = self.explode_as_fmt.format(prev_nest, nest)
-    
+
                 if len(next_nest) == 0:
                     #if main select
                     select_items_str = ""
@@ -264,9 +264,9 @@ class HiveTableGenerator:
                         select_items_str += \
                             self.select_item_fmt.format(nest, main_sel_item, column_name)
                     #use special names for foreign,parent columns to prefent name conflicts
-                    foreignk_str = self.foreignk_fmt.format(prev_nest, 
+                    foreignk_str = self.foreignk_fmt.format(prev_nest,
                                                        "_".join(nest_items[:-1]))
-                    pk_str = self.primaryk_fmt.format( prev_nest, 
+                    pk_str = self.primaryk_fmt.format( prev_nest,
                                                        "_".join(nest_items)+"_id" )
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
                 else:
@@ -280,7 +280,7 @@ class HiveTableGenerator:
                     query_str = select_str + "("+query_str+")"
                 query_str += "\n" + explode_as_str
             query_str += ";"
-    
+
             complete_script = self.create_fmt.format(table_name, self.table_custom_properties)+query_str
             with open(self.tables_folder_name+"/"+file_name+".sql", 'w') as plain_table_file:
                 plain_table_file.write(self.hive_opts)
@@ -319,22 +319,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-tn", "--table-name", help="Hive's table base name for substitution", type=str)
     parser.add_argument("-mu", "--mongouri", help="Hive's external table 'mongo.uri' parameter", type=str)
-    parser.add_argument("-ifs", "--input-file-schema", action="store", 
+    parser.add_argument("-ifs", "--input-file-schema", action="store",
                         help="Input file with json schema, (stdin by default)", type=file)
     parser.add_argument("-od", "--output-dir", help="Directory to save hiveql scripts", type=str)    
-    parser.add_argument("-fexclude", action="store", 
+    parser.add_argument("-fexclude", action="store",
                         help="Input file with list of branches to exclude, see 'ofb' option", type=file)
     parser.add_argument("-output-branches", action="store", help="Output file with list of all branches", type=argparse.FileType('w'))
     parser.add_argument("-table-custom-properties",
                         help="Optional hive's table properties like ROW FORMAT, STORED AS, LOCATION", 
                         type=str)
-    parser.add_argument("-fhive-mongo-opts", action="store", 
+    parser.add_argument("-fhive-mongo-opts", action="store",
                         help="Input file with hive mongodb options to be added into output sql files, when needed.", type=file)
-    parser.add_argument("-fhive-opts", action="store", 
+    parser.add_argument("-fhive-opts", action="store",
                         help="Input file with generic hive options to be added into output sql files.", type=file)
-    parser.add_argument("-big-table-optimization", 
+    parser.add_argument("-big-table-optimization",
                         help="If specified then intermediate native table will be created", action='store_true')
-    parser.add_argument("-short-column-names", help="If specified then short column names will be used", action='store_true')-    
+    parser.add_argument("-short-column-names", help="If specified then short column names will be used", action='store_true')
 
 
     args = parser.parse_args()
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         hive_opts = args.fhive_opts.read()
     if args.fhive_mongo_opts is not None:
         hive_mongo_opts = args.fhive_mongo_opts.read()
-    
+
     keys_mapping = create_keys_mapping(schema_branches)
     #rewrite current schema after getting keys mapping, it's used original names of fields
     schema = get_canonical_hive_schema_recursively(schema)
@@ -386,7 +386,7 @@ if __name__ == "__main__":
 
     if args.big_table_optimization:
         hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
-                                      args.table_custom_properties, hive_opts, 
+                                      args.table_custom_properties, hive_opts,
                                       args.short_column_names)
     else:
         hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
@@ -423,4 +423,3 @@ if __name__ == "__main__":
         ext_table_file.write(external_table)
         ext_table_file.close()
         message(ext_table_file.name)
-
