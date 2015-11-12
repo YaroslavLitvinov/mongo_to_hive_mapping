@@ -182,13 +182,14 @@ class HiveTableGenerator:
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
     
-    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties, hive_opts):
+    def __init__(self, schema, ext_table_name, base_table_name, tables_folder_name, table_custom_properties, hive_opts, short_column_names):
         self.helper_structure = {}
         self.ext_table_name = ext_table_name
         self.tables_folder_name = tables_folder_name
         self.create_structure_for_plain_hive_tables([base_table_name], schema, self.helper_structure)
         self.table_custom_properties = table_custom_properties
         self.hive_opts = hive_opts
+        self.short_column_names = short_column_names
 
     def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
         select_fields = []
@@ -256,10 +257,12 @@ class HiveTableGenerator:
                             main_sel_item = '.'.join(t)
                         else:
                             main_sel_item = t
+                        if self.short_column_names:
+                            column_name = main_sel_item.replace('.', '_')
+                        else:
+                            column_name = table_name[:-1]+"_"+main_sel_item.replace('.', '_')
                         select_items_str += \
-                            self.select_item_fmt.format(nest, 
-                                                   main_sel_item, 
-                                                   table_name[:-1]+'_'+main_sel_item.replace('.', '_'))
+                            self.select_item_fmt.format(nest, main_sel_item, column_name)
                     #use special names for foreign,parent columns to prefent name conflicts
                     foreignk_str = self.foreignk_fmt.format(prev_nest, 
                                                        "_".join(nest_items[:-1]))
@@ -331,6 +334,7 @@ if __name__ == "__main__":
                         help="Input file with generic hive options to be added into output sql files.", type=file)
     parser.add_argument("-big-table-optimization", 
                         help="If specified then intermediate native table will be created", action='store_true')
+    parser.add_argument("-short-column-names", help="If specified then short column names will be used", action='store_true')-    
 
 
     args = parser.parse_args()
@@ -382,10 +386,12 @@ if __name__ == "__main__":
 
     if args.big_table_optimization:
         hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
-                                      args.table_custom_properties, hive_opts)
+                                      args.table_custom_properties, hive_opts, 
+                                      args.short_column_names)
     else:
         hive_gen = HiveTableGenerator(schema, ext_table_name, args.table_name, tables_folder_name, 
-                                      args.table_custom_properties, hive_mongo_opts+hive_opts)        
+                                      args.table_custom_properties, hive_mongo_opts+hive_opts, 
+                                      args.short_column_names)
     hive_gen.hiveql_gen_nested_plain_tables()
     hive_gen.hiveql_gen_base_plain_table()
 
