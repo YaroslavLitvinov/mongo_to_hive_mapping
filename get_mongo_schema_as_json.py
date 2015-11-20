@@ -14,6 +14,17 @@ from pymongo.mongo_client import MongoClient
 def message(mes, cr='\n'):
     sys.stderr.write( mes + cr)
 
+def assign_val_to_schema_key(val, schema, key):
+    if type(val) is type:
+        schema[key] = val
+    elif type(val) is list and len(val)>0 and val[0] is not type(None):
+        schema[key] = val
+    elif type(schema[key]) == None or type(schema[key]) == type(None) or \
+            ( (type(schema[key]) is dict or type(schema[key]) is list) \
+                  and len(val) >= len(schema[key]) ) :
+        if val is not type(None) or schema[key] == None or type(schema[key]) == type(None):
+            schema[key] = val
+
 def get_mongo_collection_schema(source_data, schema):
     if type(source_data) is dict:
         if type(schema) is not dict:
@@ -26,13 +37,10 @@ def get_mongo_collection_schema(source_data, schema):
             else:
                 nested_schema = schema[key]
             tmp_schema = get_mongo_collection_schema(source_data[key], nested_schema)
-            #trying to resolve conflicts automatically, do not overwrite schema by empty data
-            if type(tmp_schema) == type:
-                schema[key] = tmp_schema
-            elif type(schema[key]) == None or type(schema[key]) == type(None) or \
-                    ( (type(schema[key]) is dict or type(schema[key]) is list) \
-                          and len(tmp_schema) >= len(schema[key]) ) :
-                schema[key] = tmp_schema
+            assign_val_to_schema_key(tmp_schema, schema, key)
+
+            #if key == 'associated_item_ids':
+            #    print key, schema[key], tmp_schema
     elif type(source_data) is list:
         if type(schema) is list:
             schema_as_list = schema
@@ -154,5 +162,4 @@ if __name__ == "__main__":
 
     schema = prepare_schema_for_serialization(schema)
     json.dump(schema, args.of, indent=4)
-
-    
+    message("Schema created")
