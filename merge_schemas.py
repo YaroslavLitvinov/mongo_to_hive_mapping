@@ -102,16 +102,11 @@ if args.primary_schema is None or args.secondary_schema is None or args.merged_s
     exit(1)
 
 primary_schema = json.load(args.primary_schema)
-print 0
 secondary_schema = json.load(args.secondary_schema)
 
-print 1
 primary_branches = get_branches_from_schema_recursively(primary_schema)
-print primary_branches
-print 2
 
 new_schema_with_derived_datatypes = copy.copy(primary_schema)
-print 3
 for branch in primary_branches:
     data_primary = get_data_from_branch_recursively(primary_schema, branch)
     data_secondary = get_data_from_branch_recursively(secondary_schema, branch)
