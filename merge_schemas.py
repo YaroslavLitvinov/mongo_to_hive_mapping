@@ -102,16 +102,18 @@ if args.primary_schema is None or args.secondary_schema is None or args.merged_s
     exit(1)
 
 primary_schema = json.load(args.primary_schema)
+print "Primary schema loaded"
 secondary_schema = json.load(args.secondary_schema)
 
+print "Secondary schema loaded"
 primary_branches = get_branches_from_schema_recursively(primary_schema)
+print "Derived datatypes for fields:", primary_branches
 
 new_schema_with_derived_datatypes = copy.copy(primary_schema)
+print "Loading resulted schema..."
 for branch in primary_branches:
     data_primary = get_data_from_branch_recursively(primary_schema, branch)
     data_secondary = get_data_from_branch_recursively(secondary_schema, branch)
-    if branch == "options.groupings.items.reference_documents":
-        pass
     if data_primary is not None and data_secondary is not None \
             and data_secondary != data_primary \
             and data_secondary != 'TINYINT':
