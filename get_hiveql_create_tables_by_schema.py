@@ -177,6 +177,7 @@ class HiveTableGenerator:
     create_fmt = "drop table {0}; create table {0} {1} as\n"
     select_fmt = "SELECT\n {0}{1}{2} \nFROM "
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
+    foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
     select_item_fmt2 = "{0} AS {1}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
@@ -227,28 +228,34 @@ class HiveTableGenerator:
         res_tables[compound_name+'s'] = (select_fields, nesting_list)
 
 
+    def helper_structure_by_name_component(self, name):
+        for table_name, table_struct in self.helper_structure.iteritems():
+            if name == table_name:
+                return table_struct
+        return None
+
     def hiveql_gen_nested_plain_tables(self):
         for table_name, table_struct in self.helper_structure.iteritems():
             file_name = table_name
             table_name = table_name.replace('-','_')
             query_str = ""
             select_str = ""
-            nest_items = table_struct[1]
+            name_components = table_struct[1]
             #skip base table
-            if len(nest_items) == 1:
+            if len(name_components) == 1:
                 continue
-            for nest_idx in xrange(len(nest_items)):
-                if nest_idx == 0:
+            for name_component_idx in xrange(len(name_components)):
+                if name_component_idx == 0:
                     continue
-                prev_nest = nest_items[nest_idx-1]
-                nest = nest_items[nest_idx]
-                next_nest = ""
-                if nest_idx+1 < len(nest_items):
-                    next_nest = nest_items[nest_idx+1]
+                prev_name_component = name_components[name_component_idx-1]
+                name_component = name_components[name_component_idx]
+                next_name_component = ""
+                if name_component_idx+1 < len(name_components):
+                    next_name_component = name_components[name_component_idx+1]
 
-                explode_as_str = self.explode_as_fmt.format(prev_nest, nest)
+                explode_as_str = self.explode_as_fmt.format(prev_name_component, name_component)
 
-                if len(next_nest) == 0:
+                if len(next_name_component) == 0:
                     #if main select
                     select_items_str = ""
                     for t in table_struct[0]:
@@ -262,17 +269,25 @@ class HiveTableGenerator:
                         else:
                             column_name = table_name[:-1]+"_"+main_sel_item.replace('.', '_')
                         select_items_str += \
-                            self.select_item_fmt.format(nest, main_sel_item, column_name)
+                            self.select_item_fmt.format(name_component, main_sel_item, column_name)
                     #use special names for foreign,parent columns to prefent name conflicts
-                    foreignk_str = self.foreignk_fmt.format(prev_nest,
-                                                       "_".join(nest_items[:-1]))
-                    pk_str = self.primaryk_fmt.format( prev_nest,
-                                                       "_".join(nest_items)+"_id" )
+                    
+                    #handle situation when foreign key is ObjectId and not just int
+                    prev_table_struct = self.helper_structure_by_name_component(prev_name_component)
+                    if prev_table_struct and \
+                            'id' not in prev_table_struct[0] and '_id' not in prev_table_struct[0]:
+                        foreignk_str = self.foreignk_fmt2.format(prev_name_component,
+                                                                "_".join(name_components[:-1]))
+                    else:
+                        foreignk_str = self.foreignk_fmt.format(prev_name_component,
+                                                                "_".join(name_components[:-1]))
+                    pk_str = self.primaryk_fmt.format( prev_name_component,
+                                                       "_".join(name_components)+"_id" )
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
                 else:
                     #if nested selects
-                    select_exp_str = self.select_item_fmt.format(nest, next_nest, next_nest)
-                    pk_str = self.primaryk_fmt.format( prev_nest, "id" )
+                    select_exp_str = self.select_item_fmt.format(name_component, next_name_component, next_name_component)
+                    pk_str = self.primaryk_fmt.format( prev_name_component, "id" )
                     select_str = self.select_fmt.format(pk_str, select_exp_str, "")
                 if len(query_str) == 0:
                     query_str = select_str + self.ext_table_name
@@ -290,9 +305,9 @@ class HiveTableGenerator:
 
     def hiveql_gen_base_plain_table(self):
         for table_name, table_struct in self.helper_structure.iteritems():
-            nest_items = table_struct[1]
+            name_components = table_struct[1]
             #skip all nested structures
-            if len(nest_items) > 1:
+            if len(name_components) > 1:
                 continue
             select_items_str = ""
             for t in table_struct[0]:
