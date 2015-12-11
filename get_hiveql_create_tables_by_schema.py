@@ -14,6 +14,8 @@ import os
 import argparse
 import json
 
+artifical_field_name='artificial_field_name_do_not_change'
+
 def message(mes):
     sys.stderr.write( mes + '\n')
 
@@ -117,8 +119,12 @@ def get_branches_from_schema_recursively(schema):
             except:
                 message("Data type not specified. Empty arrays like [] not allowed")
                 raise
-            for item in l:
-                branches.append(key+'.'+item)
+            if len(l): 
+                for item in l:
+                    branches.append(key+'.'+item)
+            else:
+                #field is just an array of basic data type
+                branches.append(key)
         else:
             branches.append(key)
     return branches
@@ -180,6 +186,7 @@ class HiveTableGenerator:
     foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
     select_item_fmt2 = "{0} AS {1}"
+    select_item_fmt3 = ",\n{0}_exp AS {1}"
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
 
@@ -192,7 +199,7 @@ class HiveTableGenerator:
         self.hive_opts = hive_opts
         self.short_column_names = short_column_names
 
-    def create_structure_for_plain_hive_tables(self,nesting_list, schema, res_tables):
+    def create_structure_for_plain_hive_tables(self, nesting_list, schema, res_tables):
         select_fields = []
         output = ""
         if type(schema) is dict:
@@ -200,7 +207,9 @@ class HiveTableGenerator:
         elif type(schema) is list:
             schema_as_dict = schema[0]
         else:
-            return
+            #handle case when list contains just an item of primitive data type 
+            artificial_struct = {artifical_field_name:schema}
+            schema_as_dict = artificial_struct
 
         select_fields = []
         for key, value in schema_as_dict.iteritems():
@@ -268,8 +277,13 @@ class HiveTableGenerator:
                             column_name = main_sel_item.replace('.', '_')
                         else:
                             column_name = table_name[:-1]+"_"+main_sel_item.replace('.', '_')
-                        select_items_str += \
-                            self.select_item_fmt.format(name_component, main_sel_item, column_name)
+                        #handling array item of base data types (not struct)
+                        if main_sel_item == artifical_field_name:
+                            select_items_str += \
+                                self.select_item_fmt3.format(name_component, name_component[:-1])
+                        else:
+                            select_items_str += \
+                                self.select_item_fmt.format(name_component, main_sel_item, column_name)
                     #use special names for foreign,parent columns to prefent name conflicts
                     
                     #handle situation when foreign key is ObjectId and not just int
@@ -286,7 +300,12 @@ class HiveTableGenerator:
                     select_str = self.select_fmt.format(pk_str, foreignk_str, select_items_str)
                 else:
                     #if nested selects
-                    select_exp_str = self.select_item_fmt.format(name_component, next_name_component, next_name_component)
+                    #handling array item of base data types (not struct)
+                    if next_name_component == artifical_field_name:
+                        select_exp_str = \
+                            self.select_item_fmt3.format(name_component, name_component[:-1])
+                    else:
+                        select_exp_str = self.select_item_fmt.format(name_component, next_name_component, next_name_component)
                     pk_str = self.primaryk_fmt.format( prev_name_component, "id" )
                     select_str = self.select_fmt.format(pk_str, select_exp_str, "")
                 if len(query_str) == 0:
