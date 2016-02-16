@@ -49,3 +49,10 @@ example: python get_mongo_schema_as_json.py --host localhost -cn db.collection |
 Generated tables may have duplicate fields due to naming conflicts, in
 this case it's can be resolved manually by altering name of field in
 produced file.
+
+4.Tests
+Before tests import data to test mongodb:
+```
+mongo test --eval "db.get_sql_query_tests.remove({}); db.get_sql_query_tests.save(`cat test_files/json_data1.txt`);"
+python get_mongo_schema_as_json.py --host localhost -cn test.get_sql_query_tests -of test_files/json_schema1.txt
+```

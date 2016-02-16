@@ -1,0 +1,15 @@
+{
+    "field": "STRING", 
+    "dates": [
+        {
+            "date1": "STRING", 
+            "date3": "STRING", 
+            "date2": "TIMESTAMP", 
+            "date4": "STRING"
+        }
+    ], 
+    "_id": {
+        "oid": "STRING", 
+        "bsontype": "INT"
+    }
+}
