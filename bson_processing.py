@@ -26,7 +26,8 @@ class BsonProcessing:
                 for dict_l in data:
                     #dict type array
                     for key, value in schema[0].iteritems():
-                        self.get_tables_structure(value, dict_l[key], table_name, key, tables)
+                        if key in dict_l:
+                            self.get_tables_structure(value, dict_l[key], table_name, key, tables)
             else:
                 #base type array
                 for data_l in data:

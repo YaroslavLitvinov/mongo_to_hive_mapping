@@ -1,15 +1,25 @@
 {
     "field": "STRING", 
-    "dates": [
+    "relatives": [
         {
-            "date1": "STRING", 
-            "date3": "STRING", 
-            "date2": "TIMESTAMP", 
-            "date4": "STRING"
+            "age": "INT", 
+            "relation": "STRING", 
+            "name": "STRING"
         }
     ], 
     "_id": {
         "oid": "STRING", 
         "bsontype": "INT"
-    }
+    }, 
+    "indeces": [
+        "INT"
+    ], 
+    "dates": [
+        {
+            "date1": "STRING", 
+            "date3": "STRING", 
+            "date2": "STRING", 
+            "date4": "STRING"
+        }
+    ]
 }
