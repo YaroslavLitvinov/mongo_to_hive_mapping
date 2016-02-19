@@ -16,6 +16,7 @@ def message(mes):
     sys.stderr.write( mes + '\n')
 
 def callback(table, schema, data, fieldname):
+    res = []
     columns=[]
     #print 'callback', schema, data
     for type_item in schema:
@@ -32,10 +33,11 @@ def callback(table, schema, data, fieldname):
                     values.append(record[type_item][dict_item])
             elif type(schema[type_item]) is not list:
                 values.append(str(record[type_item]))
-        print "INSERT INTO {table}({columns})\nVALUES({values});"\
-            .format(table=table, columns=','.join(columns), values=','.join(values))
+        res.append( "INSERT INTO {table}({columns})\nVALUES({values});"\
+                    .format(table=table, columns=','.join(columns), values=','.join(values)))
+    return res
 
-   
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-si", "--statement-insert", help="Generate insert statements", action='store_true')
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     #print schema
     tables = {}
 
-    bt = BsonProcessing(callback)
+    list_of_sqls = []
+    bt = BsonProcessing(callback, list_of_sqls)
     bt.get_tables_structure([schema], data, "quotes", "", tables)
-
-
+    print list_of_sqls

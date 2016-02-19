@@ -11,8 +11,9 @@ from bson.json_util import loads
 class BsonProcessing:
     """ Get tables structure by processing bson object. """
 
-    def __init__(self, callback):
+    def __init__(self, callback, result):
         self.callback = callback
+        self.result = result
 
     def get_tables_structure(self, schema, data, collection, fieldname, tables):
         """ generate sql statements from schema + data and return result as list of sqls"""
@@ -33,7 +34,10 @@ class BsonProcessing:
                 for data_l in data:
                     self.get_tables_structure(schema[0], data_l, '_'.join(compound_collection_list), fieldname, tables)
                 #print "base type array", schema, data
-            self.callback(table_name, tables[table_name]['schema'], tables[table_name]['data'], fieldname )
+            self.result.append( 
+                self.callback(table_name, 
+                              tables[table_name]['schema'], 
+                              tables[table_name]['data'], fieldname ) )
         if type(schema) is dict:
             if type(data) is bson.objectid.ObjectId:
                 id_oid=str(data)
@@ -64,6 +68,7 @@ class BsonProcessing:
             else:
                 #new record
                 tables[collection]['data'].append( {fieldname:data} )
+        return self.result
     
 if __name__ == "__main__":
     #todo add test
