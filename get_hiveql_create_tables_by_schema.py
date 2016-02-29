@@ -187,9 +187,15 @@ class HiveTableGenerator:
     select_fmt = "SELECT\n {0}{1}{2} \nFROM "
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
     foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
-    select_item_fmt = ",\nnvl({0}_exp.{1}, {3}) AS {2}"
-    select_item_fmt2 = "nvl({0}, {2}) AS {1}"
-    select_item_fmt3 = ",\nnvl({0}_exp, {2}) AS {1}"
+#for string fields
+    select_item_nvl_fmt = ",\nnvl({0}_exp.{1}, {3}) AS {2}"
+    select_item_nvl_fmt2 = ",\nnvl({0}, {2}) AS {1}"
+    select_item_nvl_fmt3 = ",\nnvl({0}_exp, {2}) AS {1}"
+#for non string fields
+    select_item_fmt = ",\n{0}_exp.{1} AS {2}"
+    select_item_fmt2 = ",\n{0} AS {1}"
+    select_item_fmt3 = ",\n{0}_exp AS {1}"
+#
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
     explode_as_fmt = " AS {0}_exp LATERAL VIEW EXPLODE({0}_exp.{1}) {1}_e AS {1}_exp"
 
@@ -201,6 +207,31 @@ class HiveTableGenerator:
         self.table_custom_properties = table_custom_properties
         self.hive_opts = hive_opts
         self.short_column_names = short_column_names
+
+    def sel_item_fmt(self, expname, fieldname, fieldnameas, fieldtype):
+        strtype = false
+        if fieldtype is "STRING":
+            strtype = true
+        res = ""
+        if not expname:
+            if strtype:
+                res = select_item_nvl_fmt2.format(fieldname, fieldnameas, 
+                                                  self.null_value_transform(fieldtype))
+            else:
+                res = select_item_fmt2.format(fieldname, fieldnameas)
+        elif not fieldname:
+            if strtype:
+                res = select_item_nvl_fmt3.format(expname, fieldnameas,
+                                                  self.null_value_transform(fieldtype))
+            else:
+                res = select_item_fmt3.format(expname, fieldnameas)
+        else:
+            if strtype:
+                res = select_item_nvl_fmt.format(expname, fieldname, fieldnameas,
+                                                 self.null_value_transform(fieldtype))
+            else:
+                res = select_item_fmt.format(expname, fieldname, fieldnameas)
+        return res
 
     def create_structure_for_plain_hive_tables(self, nesting_list, schema, res_tables):
         select_fields = []
@@ -295,16 +326,15 @@ class HiveTableGenerator:
                         #handling array item of base data types (not struct)
                         if main_sel_item == artifical_field_name:
                             field_type = types[artifical_field_name]
-                            select_items_str += \
-                                self.select_item_fmt3.format(name_component, name_component[:-1], self.null_value_transform(field_type))
+                            select_items_str += self.sel_item_fmt(name_component, fieldname=null, 
+                                                                  name_component[:-1], field_type)
                         else:
                             if self.short_column_names:
                                 column_name = main_sel_item.replace('.', '_')
                             else:
                                 column_name = table_name[:-1]+"_"+main_sel_item.replace('.', '_')
-                            select_items_str += \
-                                self.select_item_fmt.format(name_component, main_sel_item, column_name, 
-                                                            self.null_value_transform(field_type))
+                            select_items_str += self.sel_item_fmt(name_component, main_sel_item, 
+                                                                  column_name, field_type)
                     #use special names for foreign,parent columns to prefent name conflicts
                     
                     #handle situation when foreign key is ObjectId and not just int
@@ -324,12 +354,11 @@ class HiveTableGenerator:
                     #handling array item of base data types (not struct)
                     if next_name_component == artifical_field_name:
                         field_type = types[artifical_field_name]
-                        select_exp_str = \
-                            self.select_item_fmt3.format(name_component, name_component[:-1], 
-                                                         self.null_value_transform(field_type))
+                        select_exp_str = self.sel_item_fmt(name_component, fieldname=null, 
+                                                           name_component[:-1], field_type)
                     else:
-                        select_exp_str = self.select_item_fmt.format(name_component, next_name_component, next_name_component, 
-                                                                     self.null_value_transform(field_type))
+                        select_exp_str = self.sel_item_fmt(name_component, next_name_component, 
+                                                           next_name_component, field_type)
                     pk_str = self.primaryk_fmt.format( prev_name_component, "id" )
                     select_str = self.select_fmt.format(pk_str, select_exp_str, "")
                 if len(query_str) == 0:
@@ -360,14 +389,10 @@ class HiveTableGenerator:
                     main_sel_item = '.'.join(t)
                     as_name = main_sel_item.replace('.', '_')
                     field_type = types[as_name]
-                    main_sel_item = self.select_item_fmt2.format(main_sel_item, as_name,
-                                                                 self.null_value_transform(field_type))
+                    main_sel_item = self.sel_item_fmt(expname=null, main_sel_item, as_name, field_type)
                 else:
                     field_type = types[t]
-                    main_sel_item = self.select_item_fmt2.format(t, t,
-                                                                 self.null_value_transform(field_type))
-                if len(select_items_str):
-                    main_sel_item = ',\n'+main_sel_item
+                    main_sel_item = self.sel_item_fmt(expname=null, t, t, field_type)
                 select_items_str += main_sel_item
             select_str = self.select_fmt.format(select_items_str, "", "")
             query_str = select_str + self.ext_table_name + ';'
