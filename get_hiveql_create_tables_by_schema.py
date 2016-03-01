@@ -15,6 +15,8 @@ import argparse
 import json
 
 artifical_field_name='artificial_field_name_do_not_change'
+NILLSV=os.environ['NILLSV']
+NILLNSV=os.environ['NILLNSV']
 
 def message(mes):
     sys.stderr.write( mes + '\n')
@@ -189,11 +191,11 @@ class HiveTableGenerator:
     foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
 #for string fields
     select_item_nvl_fmt = ",\nnvl({0}_exp.{1}, {3}) AS {2}"
-    select_item_nvl_fmt2 = ",\nnvl({0}, {2}) AS {1}"
+    select_item_nvl_fmt2 = "nvl({0}, {2}) AS {1}"
     select_item_nvl_fmt3 = ",\nnvl({0}_exp, {2}) AS {1}"
 #for non string fields
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
-    select_item_fmt2 = ",\n{0} AS {1}"
+    select_item_fmt2 = "{0} AS {1}"
     select_item_fmt3 = ",\n{0}_exp AS {1}"
 #
     primaryk_fmt = "row_number() OVER(ORDER BY {0}_exp.id) AS {1}"
@@ -208,29 +210,29 @@ class HiveTableGenerator:
         self.hive_opts = hive_opts
         self.short_column_names = short_column_names
 
-    def sel_item_fmt(self, expname, fieldname, fieldnameas, fieldtype):
-        strtype = false
-        if fieldtype is "STRING":
-            strtype = true
+    def sel_item_fmt(self, expname=None, fieldname=None, fieldnameas=None, fieldtype=None):
+        strtype = None
+        if fieldtype == "STRING":
+            strtype = True
         res = ""
         if not expname:
             if strtype:
-                res = select_item_nvl_fmt2.format(fieldname, fieldnameas, 
-                                                  self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt2.format(fieldname, fieldnameas, 
+                                                       self.null_value_transform(fieldtype))
             else:
-                res = select_item_fmt2.format(fieldname, fieldnameas)
+                res = self.select_item_fmt2.format(fieldname, fieldnameas)
         elif not fieldname:
             if strtype:
-                res = select_item_nvl_fmt3.format(expname, fieldnameas,
-                                                  self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt3.format(expname, fieldnameas,
+                                                       self.null_value_transform(fieldtype))
             else:
-                res = select_item_fmt3.format(expname, fieldnameas)
+                res = self.select_item_fmt3.format(expname, fieldnameas)
         else:
             if strtype:
-                res = select_item_nvl_fmt.format(expname, fieldname, fieldnameas,
-                                                 self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt.format(expname, fieldname, fieldnameas,
+                                                      self.null_value_transform(fieldtype))
             else:
-                res = select_item_fmt.format(expname, fieldname, fieldnameas)
+                res = self.select_item_fmt.format(expname, fieldname, fieldnameas)
         return res
 
     def create_structure_for_plain_hive_tables(self, nesting_list, schema, res_tables):
@@ -280,10 +282,9 @@ class HiveTableGenerator:
     def null_value_transform(self, column_type):
         """support null value transformation into hadcoded str depending on type to be used in query"""
         if column_type == "STRING":
-            return "nIllSV"
+            return "'"+NILLSV+"'"
         else:
-            return "nIllNSV"
-
+            Exception(NILLNSV)
 
     def helper_structure_by_name_component(self, name):
         for table_name, table_struct in self.helper_structure.iteritems():
@@ -322,13 +323,12 @@ class HiveTableGenerator:
                             main_sel_item = '.'.join(t)
                         else:
                             main_sel_item = t
-                        field_type = types[main_sel_item.replace('.', '_')]
                         #handling array item of base data types (not struct)
                         if main_sel_item == artifical_field_name:
                             field_type = types[artifical_field_name]
-                            select_items_str += self.sel_item_fmt(name_component, fieldname=null, 
-                                                                  name_component[:-1], field_type)
+                            select_items_str += self.sel_item_fmt(expname=name_component, fieldname=None, fieldnameas=name_component[:-1], fieldtype=field_type)
                         else:
+                            field_type = types[main_sel_item.replace('.', '_')]
                             if self.short_column_names:
                                 column_name = main_sel_item.replace('.', '_')
                             else:
@@ -354,8 +354,8 @@ class HiveTableGenerator:
                     #handling array item of base data types (not struct)
                     if next_name_component == artifical_field_name:
                         field_type = types[artifical_field_name]
-                        select_exp_str = self.sel_item_fmt(name_component, fieldname=null, 
-                                                           name_component[:-1], field_type)
+                        select_exp_str = self.sel_item_fmt(expname=name_component, fieldname=None, 
+                                                           fieldnameas=name_component[:-1], fieldtype=field_type)
                     else:
                         select_exp_str = self.sel_item_fmt(name_component, next_name_component, 
                                                            next_name_component, field_type)
@@ -389,10 +389,12 @@ class HiveTableGenerator:
                     main_sel_item = '.'.join(t)
                     as_name = main_sel_item.replace('.', '_')
                     field_type = types[as_name]
-                    main_sel_item = self.sel_item_fmt(expname=null, main_sel_item, as_name, field_type)
+                    main_sel_item = self.sel_item_fmt(expname=None, fieldname=main_sel_item, fieldnameas=as_name, fieldtype=field_type)
                 else:
                     field_type = types[t]
-                    main_sel_item = self.sel_item_fmt(expname=null, t, t, field_type)
+                    main_sel_item = self.sel_item_fmt(expname=None, fieldname=t, fieldnameas=t, fieldtype=field_type)
+                if len(select_items_str):
+                    main_sel_item = ',\n'+main_sel_item
                 select_items_str += main_sel_item
             select_str = self.select_fmt.format(select_items_str, "", "")
             query_str = select_str + self.ext_table_name + ';'
