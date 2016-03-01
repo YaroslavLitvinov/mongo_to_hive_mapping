@@ -15,8 +15,6 @@ import argparse
 import json
 
 artifical_field_name='artificial_field_name_do_not_change'
-NILLSV=os.environ['NILLSV']
-NILLNSV=os.environ['NILLNSV']
 
 def message(mes):
     sys.stderr.write( mes + '\n')
@@ -190,9 +188,9 @@ class HiveTableGenerator:
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
     foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
 #for string fields
-    select_item_nvl_fmt = ",\nnvl(translate({0}_exp.{1}, '\r\n', '  '), {3}) AS {2}"
-    select_item_nvl_fmt2 = "nvl(translate({0}, '\r\n', '  '), {2}) AS {1}"
-    select_item_nvl_fmt3 = ",\nnvl(translate({0}_exp, '\r\n', '  '), {2}) AS {1}"
+    select_item_nvl_fmt = ",\ntranslate({0}_exp.{1}, '\r\n', '  ') AS {2}"
+    select_item_nvl_fmt2 = "translate({0}, '\r\n', '  ') AS {1}"
+    select_item_nvl_fmt3 = ",\ntranslate({0}_exp, '\r\n', '  ') AS {1}"
 #for non string fields
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
     select_item_fmt2 = "{0} AS {1}"
@@ -217,20 +215,17 @@ class HiveTableGenerator:
         res = ""
         if not expname:
             if strtype:
-                res = self.select_item_nvl_fmt2.format(fieldname, fieldnameas, 
-                                                       self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt2.format(fieldname, fieldnameas)
             else:
                 res = self.select_item_fmt2.format(fieldname, fieldnameas)
         elif not fieldname:
             if strtype:
-                res = self.select_item_nvl_fmt3.format(expname, fieldnameas,
-                                                       self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt3.format(expname, fieldnameas)
             else:
                 res = self.select_item_fmt3.format(expname, fieldnameas)
         else:
             if strtype:
-                res = self.select_item_nvl_fmt.format(expname, fieldname, fieldnameas,
-                                                      self.null_value_transform(fieldtype))
+                res = self.select_item_nvl_fmt.format(expname, fieldname, fieldnameas)
             else:
                 res = self.select_item_fmt.format(expname, fieldname, fieldnameas)
         return res
@@ -277,14 +272,6 @@ class HiveTableGenerator:
                 compound_name += "-"
             compound_name += name
         res_tables[compound_name+'s'] = (select_fields, nesting_list, types)
-
-
-    def null_value_transform(self, column_type):
-        """support null value transformation into hadcoded str depending on type to be used in query"""
-        if column_type == "STRING":
-            return "'"+NILLSV+"'"
-        else:
-            Exception(NILLNSV)
 
     def helper_structure_by_name_component(self, name):
         for table_name, table_struct in self.helper_structure.iteritems():
