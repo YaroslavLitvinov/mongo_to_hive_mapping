@@ -190,9 +190,9 @@ class HiveTableGenerator:
     foreignk_fmt = ",\n{0}_exp.id AS {1}_id"
     foreignk_fmt2 = ",\n{0}_exp.id.oid AS {1}_id"
 #for string fields
-    select_item_nvl_fmt = ",\nnvl({0}_exp.{1}, {3}) AS {2}"
-    select_item_nvl_fmt2 = "nvl({0}, {2}) AS {1}"
-    select_item_nvl_fmt3 = ",\nnvl({0}_exp, {2}) AS {1}"
+    select_item_nvl_fmt = ",\nnvl(translate({0}_exp.{1}, '\r\n', '  '), {3}) AS {2}"
+    select_item_nvl_fmt2 = "nvl(translate({0}, '\r\n', '  '), {2}) AS {1}"
+    select_item_nvl_fmt3 = ",\nnvl(translate({0}_exp, '\r\n', '  '), {2}) AS {1}"
 #for non string fields
     select_item_fmt = ",\n{0}_exp.{1} AS {2}"
     select_item_fmt2 = "{0} AS {1}"
