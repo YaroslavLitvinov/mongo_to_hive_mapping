@@ -7,107 +7,46 @@ __email__ = "yaroslav.litvinov@rackspace.com"
 import bson
 
 class SqlColumn:
-    def __init__(self, name, value, is_index):
-        self.name = name
-        self.typo = value
+    def __init__(self, root, node):
+        self.root = root
+        self.node = node
         self.values = []
-        self.is_index = is_index
-        self.node = None
+        if node.value == node.type_array:
+            self.typo = 'BIGINT'
+            if node.long_alias() == root .long_alias():
+                self.name = 'idx'
+            else:
+                self.name = node.long_alias()+'_idx'
+        else:
+            self.name = node.short_alias()
+            self.typo = node.value
 
     def set_node(self, node):
         self.node = node
 
     def __repr__(self):
-        return '\n' + str(self.name) + ': ' + self.typo + '; index: ' \
-            + str(self.is_index) + '; values: ' + str(self.values)
+        return '\n' + str(self.name) + ': ' + self.typo + \
+            '; values: ' + str(self.values)
 
 class SqlTable:
     def __init__(self, root):
         """ Logical structure of table """
         self.sql_column_names = []
         self.sql_columns = {}
+        self.root = root
         self.table_name = root.long_plural_alias()
         for node in root.list_non_array_nodes():
-            name = node.short_alias()
-            self.sql_columns[name] = SqlColumn(name, node.value, False)
-            self.sql_columns[name].set_node(node)
-        self.add_parent_indexes([i for i in root.all_parents() \
-                                 if i != root])
+            sqlcol = SqlColumn(root, node)
+            self.sql_columns[sqlcol.name] = sqlcol
+        parent_arrays = [i for i in root.all_parents() \
+                         if i.value == i.type_array]
+        for parent_array in parent_arrays: 
+#add indexes
+            sqlcol = SqlColumn(root, parent_array)
+            self.sql_columns[sqlcol.name] = sqlcol
 
     def __repr__(self):
         return self.table_name + ' ' + str(self.sql_columns)
-
-    def add_parent_indexes(self, parents):
-        """ Add every parent's indexes & ids to columns """
-        for item in parents:
-            idxname = item.long_alias()+'_idx'
-            if idxname not in self.sql_columns:
-                self.sql_column_names.append(idxname)
-                self.sql_columns[idxname] = SqlColumn(idxname, 'BIGINT', True)
-
-    def add_id_idx_values(self, ids_indexes):
-        for colname, colval in ids_indexes.iteritems():
-            if colname in self.sql_columns:
-                self.sql_columns[colname].values.append(colval)
-
-class TablesCollection:
-    def __init__(self):
-        self.indexes = {}
-        self.tables = {}
-
-    def callback_for_populate(self, node, value):
-        table_node = node.get_host_node()
-        table_name = table_node.long_plural_alias()
-        colname = node.short_alias()
-
-        self.tables[table_name].sql_columns[colname].values.append(value)
-        print node.get_host_node().long_plural_alias(), \
-            node.long_alias(), value, self.indexes
-
-    def callback_for_populate_ids_indexes(self, node, value):
-        table_name = node.long_plural_alias()
-
-        if table_name not in self.tables:
-            self.tables[table_name] = SqlTable(node)
-        self.tables[table_name].add_id_idx_values(self.indexes)
-
-        print "populate_ids_indexes", node.value, self.tables[table_name]
-
-
-    def populate_all(self, root, data):
-        idx = 0
-        for l in data:
-            idx += 1
-            self.indexes[root.get_index_name()] = idx
-            if root.get_id_node():
-                long_idname = root.get_id_node().long_alias()
-                self.indexes[long_idname] = l[root.get_id_node().name]
-            self.populate(root, l, newrow = True)
-
-    def populate(self, node, data, newrow):
-        if newrow == True:
-            self.callback_for_populate_ids_indexes(node, data)
-        if node.value == node.type_struct:
-            if type(data) is bson.objectid.ObjectId:
-                if node.children[0].name == 'oid':
-                    self.populate(node.children[0], str(data), newrow = False)
-                else:
-                    self.children[1].populate(node, 7, newrow = False)
-            else:
-                for item in node.children:
-                    self.populate(item, data[item.name], newrow = False)
-        elif node.value == node.type_array:
-            idx = 0
-            for d in data:
-                idx += 1
-                self.indexes[node.get_index_name()] = idx
-                if node.get_id_node():
-                    long_idname = node.get_id_node().long_alias()
-                    self.indexes[long_idname] = data[node.get_id_node().name]
-                self.populate(node.children[0], d, newrow = True)
-        else:
-            self.callback_for_populate(node, data)
-    
 
 class SchemaNode:
     type_struct = 'STRUCT'
@@ -135,16 +74,6 @@ class SchemaNode:
                 return [i] + l
         return l
 
-    def get_host_node(self):
-        """ get node w/o parent or array """
-        if self.parent:
-            if self.parent.value == self.type_array:
-                return self.parent
-            else:
-                return self.parent.get_host_node()
-        else:
-            return self
-
     def all_parents(self):
         if self.parent:
             return self.parent.all_parents() + [self]
@@ -161,18 +90,6 @@ class SchemaNode:
                 return node_parent_id_oid
             else:
                 return node_parent_id
-
-    def get_index_name(self):
-        if self.value == self.type_array or not self.parent:
-            return self.long_alias()+'_idx'
-        else:
-            return None
-
-    def iterate_all_nested(self, callback):
-        for item in self.children:
-            if item.value != self.type_struct:
-                callback(item)
-            item.iterate_all_nested(callback)
 
     def list_non_array_nodes(self):
         fields = []
@@ -267,8 +184,7 @@ class SchemaNode:
             n = 0
             for item in p:
                 n += 1
-                if ((item.value == self.type_array and item.children[0].name) or not item.parent) \
-                   and n != len(p):
+                if item.value == self.type_array and n != len(p):
                     l.append(item.external_name()[:-1])
                 elif item.name:
                     l.append(item.external_name())
@@ -355,44 +271,40 @@ class DataEngine:
                 curdata = 7
         return curdata
 
+def load_table_callback(tables, data, node):
+    print "load_table_callback", node.value, node.long_plural_alias()
+    table_name = node.long_plural_alias()
+    if node.parent.value == node.type_array:
+        table_name = node.parent.long_plural_alias()
+    if table_name not in tables.tables:
+        tables.tables[table_name] = SqlTable(node)
+    sqltable = tables.tables[table_name]
+    for column_name, column in sqltable.sql_columns.iteritems():
+        if column.node.value == column.node.type_array: #index
+            idxcolkey = column.node.long_alias()
+            column.values.append( tables.data_engine.indexes[idxcolkey] )
+        else:
+            column.values.append( tables.data_engine.get_current_record_data(column.node) )
+
+class Tables:
+    def __init__(self, schema_engine):
+        self.tables = {}
+        self.schema_engine = schema_engine
+        self.data_engine = \
+                DataEngine(schema_engine.root_node, schema_engine.data, \
+                           load_table_callback, self)
+
+    def load_all(self):
+        root = self.schema_engine.root_node
+        array = [root] + root.get_nested_array_type_nodes()
+        self.data_engine.load_data_recursively(self.schema_engine.data, root)
+
+
 def load_schema(collection):
     from test_schema_engine import prepare_engine
     schema_engine = prepare_engine(collection)
     print schema_engine.root_node
     return schema_engine
-
-
-def load_table_callback(tables, data, node):
-    print "load_callback", node.long_alias()
-    table_name = node.long_plural_alias()
-    if table_name not in tables.tables:
-        tables.tables[table_name] = SqlTable(node)
-    sqltable = tables.tables[table_name]
-    for column_name, column in sqltable.sql_columns.iteritems():
-        if column.node:
-            column.values.append( tables.data_engine.get_current_record_data(column.node) )
-        else: #index
-            pass
-
-class Tables:
-    def load_array_items_callback(item):
-        print item.long_alias(), "=", self.data_engine.get_current_record_data(item)
-        pass
-
-
-    def __init__(self, schema_engine):
-        self.tables = {}
-        self.schema_engine = schema_engine
-        self.data_engine = DataEngine(schema_engine.root_node, \
-                                      schema_engine.data, \
-                                      load_table_callback, \
-                                      self)
-
-    def load_all(self):
-        root = self.schema_engine.root_node
-        array = [root] + root.get_nested_array_type_nodes()
-        self.data_engine.load_data_recursively(schema_engine.data, root)
-
 
 def load_data(schema_engine):
     tables = Tables(schema_engine)
@@ -400,15 +312,13 @@ def load_data(schema_engine):
     return tables
 
 if __name__ == "__main__":
-    schema_engine = load_schema("quotes")
-    tables = load_data(schema_engine)
-    
+    from test_schema_engine import test_all_tables
+    test_all_tables()
 
-    
 
-    print SqlTable(schema_engine.root_node)
-    print SqlTable(schema_engine.root_node.locate(['comments']))
-    print SqlTable(schema_engine.root_node.locate(['comments', 'items']))
+    #print SqlTable(schema_engine.root_node)
+    #print SqlTable(schema_engine.root_node.locate(['comments']))
+    #print SqlTable(schema_engine.root_node.locate(['comments', 'items']))
 
     #from test_schema_engine import test_locate_parents
     #test_locate_parents()
