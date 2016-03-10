@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import json
-import bson
-from bson.json_util import loads
-
-#from schema_engine import create_schema_engine, SchemaNode, SchemaEngine, SqlTable, Tables
 import schema_engine
 
 files = {'a_inserts': ('test_files/json_schema2.txt',
