@@ -32,6 +32,7 @@ class SqlColumn:
 class SqlTable:
     def __init__(self, root):
         """ Logical structure of table """
+        assert(root.value == root.type_array)
         self.sql_column_names = []
         self.sql_columns = {}
         self.root = root
@@ -241,7 +242,7 @@ class DataEngine:
             for data_i in data:
                 self.inc_single_index(key_name)
                 self.load_data_recursively(data_i, node.children[0])
-                self.callback(self.callback_param, data_i, node.children[0])
+                self.callback(self.callback_param, node)
                 if self.cursors[key_name]+1 < len(data):
                     self.cursors[key_name] += 1
 
@@ -273,10 +274,8 @@ class DataEngine:
                 curdata = 7
         return curdata
 
-def load_table_callback(tables, data, node):
+def load_table_callback(tables, node):
     table_name = node.long_plural_alias()
-    if node.parent.value == node.type_array:
-        table_name = node.parent.long_plural_alias()
     if table_name not in tables.tables:
         tables.tables[table_name] = SqlTable(node)
     sqltable = tables.tables[table_name]
@@ -320,12 +319,4 @@ def create_tables_load_file(schema_engine, datapath):
 if __name__ == "__main__":
     from test_schema_engine import test_all_tables
     test_all_tables()
-
-
-    #print SqlTable(schema_engine.root_node)
-    #print SqlTable(schema_engine.root_node.locate(['comments']))
-    #print SqlTable(schema_engine.root_node.locate(['comments', 'items']))
-
-    #from test_schema_engine import test_locate_parents
-    #test_locate_parents()
 

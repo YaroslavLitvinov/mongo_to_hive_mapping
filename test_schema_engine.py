@@ -70,29 +70,11 @@ def check_one_column(sqltable, colname, values):
     assert(sqlcol.name == colname)
     assert(sqlcol.values == values)
 
-def generate_insert_queries(table):
-    """ get output as list of tuples :format string, parameters as tuple """
-    queries = []
-    fmt_string = "INSERT INTO table %s (%s) VALUES(%s);" \
-                 % (table.table_name, \
-                    ', '.join(table.sql_column_names), \
-                    ', '.join(['%s' for i in table.sql_column_names]))
-    firstcolname = table.sql_column_names[0]
-    reccount = len(table.sql_columns[firstcolname].values)
-    for val_i in xrange(reccount):
-        values = [table.sql_columns[i].values[val_i] for i in table.sql_column_names]
-        queries.append( (fmt_string, tuple(values)) )
-    return queries
-
 def check_a_inserts_table(tables):
     sqltable = tables.tables["a_inserts"]
     check_one_column(sqltable, 'body', ['body3'])
     check_one_column(sqltable, 'id_oid', ['56b8f05cf9fcee1b00000010'])
     check_one_column(sqltable, 'idx', [1])
-    queries = generate_insert_queries(sqltable)
-    print sqltable.table_name
-    print queries
-    assert(len(queries)==1)
 
 def check_comments_table(tables):
     sqltable = tables.tables["a_insert_comments"]
@@ -101,10 +83,6 @@ def check_comments_table(tables):
     check_one_column(sqltable, 'body', ['body3', 'body2'])
     check_one_column(sqltable, 'idx', [1, 2])
     check_one_column(sqltable, 'a_inserts_idx', [1, 1])
-    queries = generate_insert_queries(sqltable)
-    print sqltable.table_name
-    print queries
-    assert(len(queries)==2)
 
 def check_items_table(tables):
     sqltable = tables.tables["a_insert_comment_items"]
