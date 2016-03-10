@@ -37,12 +37,14 @@ class SqlTable:
         self.table_name = root.long_plural_alias()
         for node in root.list_non_array_nodes():
             sqlcol = SqlColumn(root, node)
+            self.sql_column_names.append(sqlcol.name)
             self.sql_columns[sqlcol.name] = sqlcol
         parent_arrays = [i for i in root.all_parents() \
                          if i.value == i.type_array]
         for parent_array in parent_arrays: 
 #add indexes
             sqlcol = SqlColumn(root, parent_array)
+            self.sql_column_names.append(sqlcol.name)
             self.sql_columns[sqlcol.name] = sqlcol
 
     def __repr__(self):

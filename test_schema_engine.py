@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import json
 import bson
 from bson.json_util import loads
@@ -8,8 +9,10 @@ from schema_engine import SchemaNode, SchemaEngine, SqlTable, Tables
 
 
 def prepare_engine(collection_name):
-    with open("test_files/json_schema2.txt", "r") as input_schema_f, \
-         open("test_files/bson_data2.txt", "r") as input_data_f:
+    dirpath=os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(dirpath,"test_files/json_schema2.txt"), "r") \
+         as input_schema_f, \
+         open(os.path.join(dirpath,"test_files/bson_data2.txt"), "r") as input_data_f:
         schema = [json.load(input_schema_f)]
         data = bson.json_util.loads( input_data_f.read() )
         return SchemaEngine(collection_name, schema, data)
@@ -59,11 +62,29 @@ def check_one_column(sqltable, colname, values):
     assert(sqlcol.name == colname)
     assert(sqlcol.values == values)
 
+def generate_insert_queries(table):
+    """ get output as list of tuples :format string, parameters as tuple """
+    queries = []
+    fmt_string = "INSERT INTO table %s (%s) VALUES(%s);" \
+                 % (table.table_name, \
+                    ', '.join(table.sql_column_names), \
+                    ', '.join(['%s' for i in table.sql_column_names]))
+    firstcolname = table.sql_column_names[0]
+    reccount = len(table.sql_columns[firstcolname].values)
+    for val_i in xrange(reccount):
+        values = [table.sql_columns[i].values[val_i] for i in table.sql_column_names]
+        queries.append( (fmt_string, tuple(values)) )
+    return queries
+
 def check_quotes_table(tables):
     sqltable = tables.tables["quotes"]
     check_one_column(sqltable, 'body', ['body3'])
     check_one_column(sqltable, 'id_oid', ['56b8f05cf9fcee1b00000010'])
     check_one_column(sqltable, 'idx', [1])
+    queries = generate_insert_queries(sqltable)
+    print sqltable.table_name
+    print queries
+    assert(len(queries)==1)
 
 def check_comments_table(tables):
     sqltable = tables.tables["quote_comments"]
@@ -72,6 +93,10 @@ def check_comments_table(tables):
     check_one_column(sqltable, 'body', ['body3', 'body2'])
     check_one_column(sqltable, 'idx', [1, 2])
     check_one_column(sqltable, 'quotes_idx', [1, 1])
+    queries = generate_insert_queries(sqltable)
+    print sqltable.table_name
+    print queries
+    assert(len(queries)==2)
 
 def check_items_table(tables):
     sqltable = tables.tables["quote_comment_items"]
@@ -92,3 +117,5 @@ def test_all_tables():
     check_comments_table(tables)
     check_items_table(tables)
 
+
+    
