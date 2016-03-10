@@ -4,6 +4,7 @@ __author__ = "Yaroslav Litvinov"
 __copyright__ = "Copyright 2016, Rackspace Inc."
 __email__ = "yaroslav.litvinov@rackspace.com"
 
+import json
 import bson
 
 class SqlColumn:
@@ -194,7 +195,7 @@ class SchemaNode:
 
 
 class SchemaEngine:
-    def __init__(self, name, schema, data):
+    def __init__(self, name, schema):
         self.root_node = SchemaNode(None)
         self.root_node.load(name, schema)
         for item in self.root_node.get_nested_array_type_nodes():
@@ -203,7 +204,6 @@ class SchemaEngine:
             else:
                 item.add_parents_references()
         self.schema = schema
-        self.data = data
 
     def locate(self, fields_list):
         return self.root_node.locate(fields_list)
@@ -274,7 +274,6 @@ class DataEngine:
         return curdata
 
 def load_table_callback(tables, data, node):
-    print "load_table_callback", node.value, node.long_plural_alias()
     table_name = node.long_plural_alias()
     if node.parent.value == node.type_array:
         table_name = node.parent.long_plural_alias()
@@ -289,29 +288,34 @@ def load_table_callback(tables, data, node):
             column.values.append( tables.data_engine.get_current_record_data(column.node) )
 
 class Tables:
-    def __init__(self, schema_engine):
+    def __init__(self, schema_engine, bson_data):
         self.tables = {}
+        self.data = bson_data
         self.schema_engine = schema_engine
         self.data_engine = \
-                DataEngine(schema_engine.root_node, schema_engine.data, \
+                DataEngine(schema_engine.root_node, self.data, \
                            load_table_callback, self)
 
     def load_all(self):
         root = self.schema_engine.root_node
         array = [root] + root.get_nested_array_type_nodes()
-        self.data_engine.load_data_recursively(self.schema_engine.data, root)
+        self.data_engine.load_data_recursively(self.data, root)
 
 
-def load_schema(collection):
-    from test_schema_engine import prepare_engine
-    schema_engine = prepare_engine(collection)
-    print schema_engine.root_node
-    return schema_engine
+def create_schema_engine(collection_name, schemapath):
+    with open(schemapath, "r") as input_schema_f:
+        schema = [json.load(input_schema_f)]
+        return SchemaEngine(collection_name, schema)
 
-def load_data(schema_engine):
-    tables = Tables(schema_engine)
+def create_tables_load_data(schema_engine, data):
+    bson_data = bson.json_util.loads(data)
+    tables = Tables(schema_engine, bson_data)
     tables.load_all()
     return tables
+
+def create_tables_load_file(schema_engine, datapath):
+    with open(datapath, "r") as input_f:
+        return create_tables_load_data(schema_engine, input_f.read())
 
 if __name__ == "__main__":
     from test_schema_engine import test_all_tables

@@ -5,27 +5,35 @@ import json
 import bson
 from bson.json_util import loads
 
-from schema_engine import SchemaNode, SchemaEngine, SqlTable, Tables
+#from schema_engine import create_schema_engine, SchemaNode, SchemaEngine, SqlTable, Tables
+import schema_engine
 
+files = {'a_inserts': ('test_files/json_schema2.txt',
+                       'test_files/bson_data2.txt')}
 
-def prepare_engine(collection_name):
+def get_schema_engine(collection_name):
     dirpath=os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(dirpath,"test_files/json_schema2.txt"), "r") \
-         as input_schema_f, \
-         open(os.path.join(dirpath,"test_files/bson_data2.txt"), "r") as input_data_f:
-        schema = [json.load(input_schema_f)]
-        data = bson.json_util.loads( input_data_f.read() )
-        return SchemaEngine(collection_name, schema, data)
+    schema_fname = files[collection_name][0]
+    schema_path = os.path.join(dirpath, schema_fname)
+    return schema_engine.create_schema_engine(collection_name, schema_path)
+
+def get_schema_tables(schema_engine_obj):
+    collection_name = schema_engine_obj.root_node.name
+    dirpath=os.path.dirname(os.path.abspath(__file__))
+    data_fname = files[collection_name][1]
+    data_path = os.path.join(dirpath, data_fname)
+    return schema_engine.create_tables_load_file(schema_engine_obj, \
+                                                 data_path)
 
 def get_test_node(full_path):
-    engine = prepare_engine( full_path[0] )
+    engine = get_schema_engine( full_path[0] )
     if len(full_path) > 1:
         return engine.locate(full_path[1:])
     else:
         return engine.root_node
 
 def test_locate_parents():
-    full_path = ['quotes', 'comments', 'items']
+    full_path = ['a_inserts', 'comments', 'items']
     root = get_test_node([full_path[0]])
     assert("items" == root.locate(full_path[1:]).name)
     parents = [i.name \
@@ -40,22 +48,22 @@ def test_all_aliases():
         assert(long_alias == node1.long_alias())
         assert(long_plural_alias == node1.long_plural_alias())
 #test parental field name
-    test_alias(['quotes', 'comments', 'quotes_id_oid'], \
-               'quotes_id_oid', 'quotes_id_oid', 'quotes_id_oid')
+    test_alias(['a_inserts', 'comments', 'a_inserts_id_oid'], \
+               'a_inserts_id_oid', 'a_inserts_id_oid', 'a_inserts_id_oid')
 #test structrure field name
-    test_alias(['quotes', 'comments', 'body'], \
-               'body', 'quotes_comments_body', \
-               'quote_comment_body')
+    test_alias(['a_inserts', 'comments', 'body'], \
+               'body', 'a_inserts_comments_body', \
+               'a_insert_comment_body')
 #test nested struct field name
-    test_alias(['quotes', 'comments', '_id', 'oid'], \
-               'id_oid', 'quotes_comments_id_oid', \
-               'quote_comment_id_oid')
+    test_alias(['a_inserts', 'comments', '_id', 'oid'], \
+               'id_oid', 'a_inserts_comments_id_oid', \
+               'a_insert_comment_id_oid')
 #test 1 level array name
-    test_alias(['quotes'], 'quotes', 'quotes', 'quotes')
+    test_alias(['a_inserts'], 'a_inserts', 'a_inserts', 'a_inserts')
 #test nested array name
-    test_alias(['quotes', 'comments', 'items'], \
-               'items', 'quotes_comments_items', \
-               'quote_comment_items')
+    test_alias(['a_inserts', 'comments', 'items'], \
+               'items', 'a_inserts_comments_items', \
+               'a_insert_comment_items')
 
 def check_one_column(sqltable, colname, values):
     sqlcol = sqltable.sql_columns[colname]
@@ -76,8 +84,8 @@ def generate_insert_queries(table):
         queries.append( (fmt_string, tuple(values)) )
     return queries
 
-def check_quotes_table(tables):
-    sqltable = tables.tables["quotes"]
+def check_a_inserts_table(tables):
+    sqltable = tables.tables["a_inserts"]
     check_one_column(sqltable, 'body', ['body3'])
     check_one_column(sqltable, 'id_oid', ['56b8f05cf9fcee1b00000010'])
     check_one_column(sqltable, 'idx', [1])
@@ -87,33 +95,32 @@ def check_quotes_table(tables):
     assert(len(queries)==1)
 
 def check_comments_table(tables):
-    sqltable = tables.tables["quote_comments"]
+    sqltable = tables.tables["a_insert_comments"]
     check_one_column(sqltable, 'id_oid', ['56b8f05cf9fcee1b00000110',\
                                           '56b8f05cf9fcee1b00000011'])
     check_one_column(sqltable, 'body', ['body3', 'body2'])
     check_one_column(sqltable, 'idx', [1, 2])
-    check_one_column(sqltable, 'quotes_idx', [1, 1])
+    check_one_column(sqltable, 'a_inserts_idx', [1, 1])
     queries = generate_insert_queries(sqltable)
     print sqltable.table_name
     print queries
     assert(len(queries)==2)
 
 def check_items_table(tables):
-    sqltable = tables.tables["quote_comment_items"]
+    sqltable = tables.tables["a_insert_comment_items"]
     check_one_column(sqltable, 'data', ['1', '2'])
     check_one_column(sqltable, 'idx', [1, 2])
-    check_one_column(sqltable, 'quotes_idx', [1, 1])
-    check_one_column(sqltable, 'quotes_comments_idx', [1, 2])
+    check_one_column(sqltable, 'a_inserts_idx', [1, 1])
+    check_one_column(sqltable, 'a_inserts_comments_idx', [1, 2])
 
 def test_all_tables():
-    collection_name = 'quotes'
-    schema_engine = prepare_engine( collection_name )
-    tables = Tables(schema_engine)
-    tables.load_all()
-    assert(tables.tables.keys() == ['quote_comment_items', \
-                                    'quotes',
-                                    'quote_comments'])
-    check_quotes_table(tables)
+    collection_name = 'a_inserts'
+    schema_engine_obj = get_schema_engine( collection_name )
+    tables = get_schema_tables(schema_engine_obj)
+    assert(tables.tables.keys() == ['a_insert_comment_items', \
+                                    'a_inserts',
+                                    'a_insert_comments'])
+    check_a_inserts_table(tables)
     check_comments_table(tables)
     check_items_table(tables)
 
