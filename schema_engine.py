@@ -14,7 +14,7 @@ class SqlColumn:
         self.values = []
         if node.value == node.type_array:
             self.typo = 'BIGINT'
-            if node.long_alias() == root .long_alias():
+            if node.long_alias() == root.long_alias():
                 self.name = 'idx'
             else:
                 self.name = node.long_alias()+'_idx'
@@ -43,6 +43,7 @@ class SqlTable:
             self.sql_columns[sqlcol.name] = sqlcol
         parent_arrays = [i for i in root.all_parents() \
                          if i.value == i.type_array]
+        self.sql_column_names.sort()
         for parent_array in parent_arrays: 
 #add indexes
             sqlcol = SqlColumn(root, parent_array)
@@ -148,26 +149,32 @@ class SchemaNode:
 #methods related to naming conventions
 
     def external_name(self):
-        if self.name and len(self.name) and self.name[0] == '_':
-            return self.name[1:]
+        temp = ''
+        if self.name:
+            temp = self.name 
+        elif not self.name and self.parent.value == self.type_array:
+            temp = self.parent.name
+        if len(temp) and self.name[0] == '_':
+            return temp[1:]
         else:
-            return self.name
+            return temp
 
     def short_alias(self):
         if self.reference:
-#reference items name always is long_alias()
-           return self.name
+#for reference items the name is always long_alias()
+           return self.external_name()
         else:
-            name = ''
-            if self.parent \
-               and self.parent.value == self.type_struct \
-               and self.parent.parent:
-                name = self.parent.short_alias()
-            if self.external_name():
-                if len(name):
-                    return '_'.join([name, self.external_name()])
-                else:
-                    return self.external_name()
+            parent_name = ''
+            if self.parent and self.parent.name and \
+               self.parent.value == self.type_struct:
+#parent is struct
+                parent_name = self.parent.short_alias()
+                return '_'.join([parent_name, self.external_name()])
+            elif self.name:
+                return self.external_name()
+            elif not self.name and self.value != self.type_struct:
+#empty name and not struct
+                return self.parent.external_name()
             else:
                 return ''
 
@@ -235,7 +242,8 @@ class DataEngine:
             for child in node.children:
                 if child.value == child.type_struct or \
                    child.value == child.type_array:
-                    self.load_data_recursively(data[child.name], child)
+                    if child.name in data:
+                        self.load_data_recursively(data[child.name], child)
         elif node.value == node.type_array:
             key_name = node.long_alias()
             self.cursors[key_name] = 0
