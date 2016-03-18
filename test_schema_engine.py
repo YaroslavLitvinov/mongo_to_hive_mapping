@@ -22,19 +22,29 @@ def get_schema_tables(schema_engine_obj):
 
 def get_test_node(full_path):
     engine = get_schema_engine( full_path[0] )
+    assert(engine.root_node.all_parents()==[engine.root_node])
     if len(full_path) > 1:
         return engine.locate(full_path[1:])
     else:
         return engine.root_node
 
-def test_locate_parents():
+def test_all():
     full_path = ['a_inserts', 'comments', 'items']
     root = get_test_node([full_path[0]])
     assert("items" == root.locate(full_path[1:]).name)
     parents = [i.name \
                for i in root.locate(full_path[1:]).all_parents() \
                if i.name is not None]
+    items_node = get_test_node(full_path)
+    assert(items_node.value == items_node.type_array)
+    assert(items_node.children[0].short_alias()=='')
+    assert(items_node.get_id_node())
+    field = get_test_node(full_path+['data'])
+#the same name for "array" and "noname struct in array"
+    assert(field.parent.external_name()==field.parent.parent.external_name())
+    assert("data" == field.name)
     assert(full_path==parents)
+
 
 def test_all_aliases():
     def test_alias(full_path, short_alias, long_alias, long_plural_alias):
@@ -86,16 +96,30 @@ def check_items_table(tables):
     check_one_column(sqltable, 'a_inserts_idx', [1, 1])
     check_one_column(sqltable, 'a_inserts_comments_idx', [1, 2])
 
+def check_indices_table(tables):
+    sqltable = tables.tables["a_insert_comment_item_indices"]
+    check_one_column(sqltable, 'idx', [1, 2, 3, 4, 5, 6])
+    check_one_column(sqltable, 'a_inserts_idx', [1, 1, 1, 1, 1, 1])
+    check_one_column(sqltable, 'a_inserts_comments_idx', [1, 1, 1, 2, 2, 2])
+    check_one_column(sqltable, 'indices', [10, 11, 12, 13, 14, 15])
+
 def test_all_tables():
     collection_name = 'a_inserts'
     schema_engine_obj = get_schema_engine( collection_name )
     tables = get_schema_tables(schema_engine_obj)
-    assert(tables.tables.keys() == ['a_insert_comment_items', \
-                                    'a_inserts',
-                                    'a_insert_comments'])
+    table_names_list1 = tables.tables.keys()
+    table_names_list1.sort()
+    table_names_list2 = schema_engine_obj.get_tables_list()
+    table_names_list2.sort()
+    assert(table_names_list2 == table_names_list1)
+    assert(table_names_list1 == ['a_insert_comment_item_indices',
+                                 'a_insert_comment_items', 
+                                 'a_insert_comments',
+                                 'a_inserts'])
     check_a_inserts_table(tables)
     check_comments_table(tables)
     check_items_table(tables)
+    check_indices_table(tables)
 
-
-    
+if __name__=='__main__':
+    test_all()

@@ -6,6 +6,7 @@ __email__ = "yaroslav.litvinov@rackspace.com"
 
 import json
 import bson
+from bson import json_util
 
 class SqlColumn:
     def __init__(self, root, node):
@@ -22,10 +23,7 @@ class SqlColumn:
             self.name = node.short_alias()
             self.typo = node.value
 
-    def set_node(self, node):
-        self.node = node
-
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return '\n' + str(self.name) + ': ' + self.typo + \
             '; values: ' + str(self.values)
 
@@ -50,7 +48,7 @@ class SqlTable:
             self.sql_column_names.append(sqlcol.name)
             self.sql_columns[sqlcol.name] = sqlcol
 
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return self.table_name + ' ' + str(self.sql_columns)
 
 class SchemaNode:
@@ -64,7 +62,7 @@ class SchemaNode:
         self.value = None
         self.reference = None
 
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         gap = ''.join(['----' for s in xrange(len(self.all_parents()))])
         s = "%s%s : %s" % (gap, self.external_name(), self.value)
         for c in self.children:
@@ -80,12 +78,11 @@ class SchemaNode:
         return l
 
     def all_parents(self):
+        """ return list of parents and node itself """
         if self.parent:
             return self.parent.all_parents() + [self]
-        elif self.name:
-            return [self]
         else:
-            return []
+            return [self]
 
     def get_id_node(self):
         node_parent_id = self.locate(['_id']) or self.locate(['id'])
@@ -152,9 +149,10 @@ class SchemaNode:
         temp = ''
         if self.name:
             temp = self.name 
+#the same name for "array" and "noname struct in array"
         elif not self.name and self.parent.value == self.type_array:
             temp = self.parent.name
-        if len(temp) and self.name[0] == '_':
+        if len(temp) and temp[0] == '_':
             return temp[1:]
         else:
             return temp
@@ -167,15 +165,16 @@ class SchemaNode:
             parent_name = ''
             if self.parent and self.parent.name and \
                self.parent.value == self.type_struct:
-#parent is struct
+#parent is named struct
                 parent_name = self.parent.short_alias()
                 return '_'.join([parent_name, self.external_name()])
             elif self.name:
                 return self.external_name()
             elif not self.name and self.value != self.type_struct:
-#empty name and not struct
+#non struct node with empty name
                 return self.parent.external_name()
             else:
+#struct without name
                 return ''
 
     def long_alias(self):
@@ -214,11 +213,14 @@ class SchemaEngine:
         self.schema = schema
 
     def locate(self, fields_list):
+        """ return SchemaNode object"""
         return self.root_node.locate(fields_list)
 
     def get_tables_list(self):
-        print [i.name for i in \
-               schema_engine.root_node.get_nested_array_type_nodes()]
+        table_names = [self.root_node.long_plural_alias()] + \
+                      [i.long_plural_alias() for i in \
+                       self.root_node.get_nested_array_type_nodes()]
+        return table_names
 
 
 class DataEngine:
@@ -314,17 +316,18 @@ def create_schema_engine(collection_name, schemapath):
         schema = [json.load(input_schema_f)]
         return SchemaEngine(collection_name, schema)
 
-def create_tables_load_data(schema_engine, data):
-    bson_data = bson.json_util.loads(data)
+def create_tables_load_bson_data(schema_engine, bson_data):
     tables = Tables(schema_engine, bson_data)
     tables.load_all()
     return tables
 
 def create_tables_load_file(schema_engine, datapath):
     with open(datapath, "r") as input_f:
-        return create_tables_load_data(schema_engine, input_f.read())
+        data = input_f.read()
+        bson_data = json_util.loads(data)
+        return create_tables_load_bson_data(schema_engine, bson_data)
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     from test_schema_engine import test_all_tables
     test_all_tables()
 
