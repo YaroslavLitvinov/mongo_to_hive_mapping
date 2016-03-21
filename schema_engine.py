@@ -157,6 +157,14 @@ class SchemaNode:
         else:
             return temp
 
+    def external_nonplural_name(self):
+        externname = self.external_name().lower()
+        if self.value == self.type_array and \
+           len(externname) and externname[-1] == 's':
+            return externname[:-1]
+        else:
+            return externname        
+
     def short_alias(self):
         if self.reference:
 #for reference items the name is always long_alias()
@@ -195,7 +203,7 @@ class SchemaNode:
             for item in p:
                 n += 1
                 if item.value == self.type_array and n != len(p):
-                    l.append(item.external_name()[:-1])
+                    l.append(item.external_nonplural_name())
                 elif item.name:
                     l.append(item.external_name())
             return '_'.join(l)
