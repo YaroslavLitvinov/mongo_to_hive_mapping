@@ -273,6 +273,8 @@ class DataEngine:
         component_idx = 0
 
         for parnode in node.all_parents():
+            if not curdata:
+                break
             if parnode.value == parnode.type_array:
                 cursor = self.cursors[parnode.long_alias()]
                 curdata = curdata[cursor]
@@ -280,8 +282,12 @@ class DataEngine:
                 if type(curdata) is bson.objectid.ObjectId:
                     pass
                 else:
-                    curdata = curdata[components[component_idx]]
-                    component_idx += 1
+                    fieldname = components[component_idx]
+                    if fieldname in curdata.keys():
+                        curdata = curdata[fieldname]
+                        component_idx += 1
+                    else:
+                        curdata = None
 
         if node.parent and \
            node.parent.value == node.type_struct and \
