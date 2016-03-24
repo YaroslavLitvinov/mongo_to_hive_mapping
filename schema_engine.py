@@ -27,6 +27,14 @@ class SqlColumn:
         return '\n' + str(self.name) + ': ' + self.typo + \
             '; values: ' + str(self.values)
 
+    def index_key(self):
+        """ get index name or None if not index"""
+        if self.node.value == self.node.type_array:
+            index_key = self.node.long_alias()
+            return index_key
+        else:
+            None
+
 class SqlTable:
     def __init__(self, root):
         """ Logical structure of table """
@@ -233,12 +241,16 @@ class SchemaEngine:
 
 class DataEngine:
     def __init__(self, root, bson_data, callback, callback_param):
+        """ 
+        @param root - SchemaNode root node for table
+        @param bson_data Data in bson format
+        @param callback Function fill tables by data"""
         self.root = root
         self.data = bson_data
         self.callback = callback
         self.callback_param = callback_param
         self.cursors = {}
-        self.indexes = {}
+        self.indexes = {} #Note: names of indexes is differ from col names
 
     def inc_single_index(self, key_name):
         if key_name not in self.indexes:
@@ -321,7 +333,7 @@ class Tables:
 
     def load_all(self):
         root = self.schema_engine.root_node
-        array = [root] + root.get_nested_array_type_nodes()
+#        array = [root] + root.get_nested_array_type_nodes()
         self.data_engine.load_data_recursively(self.data, root)
 
 
