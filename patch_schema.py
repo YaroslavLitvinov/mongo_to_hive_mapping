@@ -5,33 +5,6 @@ import argparse
 """  format of lines of branches to fix
 'wrong value (STRING) for quotes.customer.title(TINYINT)': 59 """
 
-def get_branches_from_schema_recursively(schema):
-    branches = []
-    if type(schema) is not dict and type(schema) is not list:
-        return branches
-
-    for key, value in schema.iteritems():
-        if type(value) is dict:
-            l = get_branches_from_schema_recursively(value)
-            if not len(l):
-                branches.append(key)
-            for item in l:
-                branches.append(key+'.'+item)
-        elif type(value) is list:
-            try:
-                l = get_branches_from_schema_recursively(value[0])
-            except:
-                message("Data type not specified. Empty arrays like [] not allowed")
-                raise
-            if not len(l):
-                branches.append(key)
-            for item in l:
-                branches.append(key+'.'+item)
-        else:
-            branches.append(key)
-    return branches
-
-
 def update_data_on_branch_recursively(schema, branch, new_value):
     if type(schema) is not list and type(schema) is not dict:
         return new_value
@@ -75,8 +48,6 @@ if args.primary_schema is None or args.patched_schema is None or args.branches_t
     exit(1)
 
 primary_schema = json.load(args.primary_schema)
-primary_branches = get_branches_from_schema_recursively(primary_schema)
-
 branches_to_fix = args.branches_to_patch.readlines()
 for item in branches_to_fix:
     s = item.split("(")
