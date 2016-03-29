@@ -4,9 +4,30 @@ __author__ = "Yaroslav Litvinov"
 __copyright__ = "Copyright 2016, Rackspace Inc."
 __email__ = "yaroslav.litvinov@rackspace.com"
 
+import sys
+import datetime
 import json
 import bson
 from bson import json_util
+
+def message(mes, cr='\n'):
+    sys.stderr.write( mes + cr)
+
+def python_type_as_str(t):
+    if t is str or t is unicode:
+        return "STRING"
+    elif t is int:
+        return "INT"
+    elif t is float:
+        return "DOUBLE"
+    elif t is datetime.datetime:
+        return "TIMESTAMP"
+    elif t is bool:
+        return "BOOLEAN"
+    elif t is bson.int64.Int64:
+        return "BIGINT"
+    else:
+        return None
 
 class SqlColumn:
     def __init__(self, root, node):
@@ -193,12 +214,12 @@ class SchemaNode:
 #struct without name
                 return ''
 
-    def long_alias(self):
+    def long_alias(self, delimeter = '_'):
         if self.reference:
             return self.name
         else:
             p = self.all_parents()
-            return '_'.join([item.external_name() for item in p if item.name])
+            return delimeter.join([item.external_name() for item in p if item.name])
 
     def long_plural_alias(self):
         if self.reference:
@@ -266,7 +287,8 @@ class DataEngine:
                    child.value == child.type_array:
                     if child.name in data:
                         self.load_data_recursively(data[child.name], child)
-        elif node.value == node.type_array:
+        elif node.value == node.type_array and type(data) is list:
+#if expected and real types are the same
             key_name = node.long_alias()
             self.cursors[key_name] = 0
             for data_i in data:
@@ -320,7 +342,31 @@ def load_table_callback(tables, node):
             idxcolkey = column.node.long_alias()
             column.values.append( tables.data_engine.indexes[idxcolkey] )
         else:
-            column.values.append( tables.data_engine.get_current_record_data(column.node) )
+            colval = tables.data_engine.get_current_record_data(column.node)
+            valtype = python_type_as_str(type(colval))
+            coltype = column.typo
+            if valtype == column.typo \
+                    or colval is None \
+                    or (valtype == 'INT' and coltype == 'DOUBLE'):
+                column.values.append( colval )
+            elif (type(colval) is list and coltype == 'TINYINT') \
+                    or (type(colval) is dict and coltype == 'TINYINT'):
+                column.values.append( None )
+            elif (type(colval) is list and coltype == 'STRING') \
+                    or (type(colval) is dict and coltype == 'STRING'):
+                column.values.append( '' )
+            else:
+                column.values.append( None )
+                colname = column.node.long_alias(delimeter='.')
+                coltype = column.typo
+                if valtype == 'STRING':
+                    colval = ''
+                error = "wrong value %s(%s) for %s(%s)" % \
+                            (str(colval), valtype, colname, coltype )
+                if error in tables.errors.keys():
+                    tables.errors[error] += 1
+                else:
+                    tables.errors[error] = 1
 
 class Tables:
     def __init__(self, schema_engine, bson_data):
@@ -330,6 +376,7 @@ class Tables:
         self.data_engine = \
                 DataEngine(schema_engine.root_node, self.data, \
                            load_table_callback, self)
+        self.errors = {}
 
     def load_all(self):
         root = self.schema_engine.root_node
