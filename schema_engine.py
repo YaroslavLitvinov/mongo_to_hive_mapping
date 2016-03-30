@@ -81,12 +81,15 @@ class SqlTable:
         return self.table_name + ' ' + str(self.sql_columns)
 
 class SchemaNode:
-    type_struct = 'STRUCT'
-    type_array = 'ARRAY'
+    type_struct = 11 #'STRUCT'
+    type_array = 12 #'ARRAY'
 
     def __init__(self, parent):
         self.parent = parent
         self.children = []
+        self.all_parents_cached = None
+        self.long_alias_cached = None
+        self.external_name_cached = None
         self.name = None
         self.value = None
         self.reference = None
@@ -107,11 +110,15 @@ class SchemaNode:
         return l
 
     def all_parents(self):
-        """ return list of parents and node itself """
+        """ return list of parents and node itself, cache results """
+        if self.all_parents_cached is not None:
+            return self.all_parents_cached
         if self.parent:
-            return self.parent.all_parents() + [self]
+            res = self.parent.all_parents() + [self]
         else:
-            return [self]
+            res = [self]
+        self.all_parents_cached = res
+        return res
 
     def get_id_node(self):
         node_parent_id = self.locate(['_id']) or self.locate(['id'])
@@ -175,16 +182,19 @@ class SchemaNode:
 #methods related to naming conventions
 
     def external_name(self):
+        if self.external_name_cached is not None:
+            return self.external_name_cached
         temp = ''
         if self.name:
             temp = self.name 
 #the same name for "array" and "noname struct in array"
         elif not self.name and self.parent.value == self.type_array:
-            temp = self.parent.name
+            self.external_name_cached = self.parent.name
         if len(temp) and temp[0] == '_':
-            return temp[1:]
+            self.external_name_cached = temp[1:]
         else:
-            return temp
+            self.external_name_cached = temp
+        return self.external_name_cached
 
     def external_nonplural_name(self):
         externname = self.external_name().lower()
@@ -215,11 +225,14 @@ class SchemaNode:
                 return ''
 
     def long_alias(self, delimeter = '_'):
+        if self.long_alias_cached is not None:
+            return self.long_alias_cached
         if self.reference:
-            return self.name
+            self.long_alias_cached = self.name
         else:
             p = self.all_parents()
-            return delimeter.join([item.external_name() for item in p if item.name])
+            self.long_alias_cached = delimeter.join([item.external_name() for item in p if item.name])
+        return self.long_alias_cached
 
     def long_plural_alias(self):
         if self.reference:
