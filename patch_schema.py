@@ -2,8 +2,10 @@ import copy
 import json
 import argparse
 
-"""  format of lines of branches to fix
-'wrong value (STRING) for quotes.customer.title(TINYINT)': 59 """
+"""Creating new schema files with type fixes from specified error data.
+format of lines of branches to fix
+'wrong value (STRING) for quotes.customer.title(TINYINT)': 59 
+wrong value (INT) for quotes.customer.region(TINYINT)': 59 """
 
 def update_data_on_branch_recursively(schema, branch, new_value):
     if type(schema) is not list and type(schema) is not dict:
