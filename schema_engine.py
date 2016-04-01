@@ -189,7 +189,7 @@ class SchemaNode:
             temp = self.name 
 #the same name for "array" and "noname struct in array"
         elif not self.name and self.parent.value == self.type_array:
-            self.external_name_cached = self.parent.name
+            temp = self.parent.name
         if len(temp) and temp[0] == '_':
             self.external_name_cached = temp[1:]
         else:
