@@ -106,7 +106,7 @@ class SchemaNode:
         for i in self.children:
             l.extend(i.get_nested_array_type_nodes())
             if i.value == self.type_array:
-                return [i] + l
+                l = [i] + l
         return l
 
     def all_parents(self):
@@ -234,7 +234,7 @@ class SchemaNode:
             self.long_alias_cached = delimeter.join([item.external_name() for item in p if item.name])
         return self.long_alias_cached
 
-    def long_plural_alias(self):
+    def long_plural_alias(self, delimiter='_'):
         if self.reference:
 #reference items name always is long_alias()
            return self.name
@@ -248,7 +248,7 @@ class SchemaNode:
                     l.append(item.external_nonplural_name())
                 elif item.name:
                     l.append(item.external_name())
-            return '_'.join(l)
+            return delimiter.join(l)
 
 
 class SchemaEngine:
@@ -266,9 +266,9 @@ class SchemaEngine:
         """ return SchemaNode object"""
         return self.root_node.locate(fields_list)
 
-    def get_tables_list(self):
-        table_names = [self.root_node.long_plural_alias()] + \
-                      [i.long_plural_alias() for i in \
+    def get_tables_list(self, delimiter='_'):
+        table_names = [self.root_node.long_plural_alias(delimiter)] + \
+                      [i.long_plural_alias(delimiter) for i in \
                        self.root_node.get_nested_array_type_nodes()]
         return table_names
 
